@@ -1,0 +1,33 @@
+name: 模块接入任务
+description: A（数据接入）或 C（前端展示）记录一个待接入或待实现的任务
+title: "[模块] 任务标题"
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: owner
+    attributes:
+      label: 负责成员
+      options:
+        - A（数据接入 / 解析服务）
+        - C（前端展示 / 工作台）
+        - B（骨架 / 编排）
+  - type: input
+    id: branch
+    attributes:
+      label: 建议分支
+      description: 如 feat/ingest 或 feat/frontend
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 要完成什么
+  - type: textarea
+    id: contract
+    attributes:
+      label: 涉及的接口 / 数据契约
+      description: 需新增或修改 src/lib/contracts.ts 中的哪些字段，或接入点
+  - type: textarea
+    id: accept
+    attributes:
+      label: 验收标准
+      description: 如何判断完成
