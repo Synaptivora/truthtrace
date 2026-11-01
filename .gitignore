@@ -8,3 +8,10 @@ coverage/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+__pycache__/
+*.py[cod]
+.venv/
+services/ingestion/_uploads/
+services/ingestion/ai_ingest/output/
+services/ingestion/tests/_*/

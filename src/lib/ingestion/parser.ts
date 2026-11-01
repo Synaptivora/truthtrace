@@ -20,7 +20,8 @@ async function parseRemotely(file: File, serviceUrl: string): Promise<Evidence> 
   });
 
   if (!response.ok) {
-    throw new Error(`证据解析服务返回 ${response.status}`);
+    const detail = await response.json().catch(() => null);
+    throw new Error(typeof detail?.error === "string" ? detail.error : `证据解析服务返回 ${response.status}`);
   }
 
   const result = await response.json();

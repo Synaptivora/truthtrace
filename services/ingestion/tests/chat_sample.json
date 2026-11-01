@@ -1,0 +1,9 @@
+[
+  {"seq": 1, "sender": "张三", "time": "2026-03-22 14:05", "type": "text", "text": "在吗，之前说的退款什么时候到账"},
+  {"seq": 2, "sender": "客服", "time": "2026-03-22 14:06", "type": "text", "text": "在的，稍等我查一下订单"},
+  {"seq": 3, "sender": "张三", "time": "2026-03-22 14:08", "type": "image", "text": "转账截图", "media": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC"},
+  {"seq": 4, "sender": "张三", "time": "2026-03-22 14:10", "type": "file", "text": "合同.pdf", "media": "docs/hetong.pdf"},
+  {"seq": 5, "sender": "张三", "time": "2026-03-22 14:12", "type": "transfer", "amount": "500", "text": "转你500定金"},
+  {"seq": 6, "sender": "张三", "time": "2026-03-22 14:15", "type": "voice", "text": "语音消息"},
+  {"seq": 7, "sender": "system", "time": "2026-03-22 14:20", "type": "system", "text": "对方已收款"}
+]
