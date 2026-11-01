@@ -546,7 +546,8 @@ $('.wall-header-actions').insertBefore(notebookButton,$('#fullscreenButton'));
 const presentationLabel=document.createElement('span');presentationLabel.className='center-presentation-label';presentationLabel.textContent='全屏展示';$('#fullscreenButton').append(presentationLabel);
 renderMain();fitBoard(true);
 const initialView=location.hash.slice(1);
-const entry=initEntryFlow({root,signal,asset,onAnalyzeFiles:bridge.analyzeFiles,onAnalysisReady:bridge.onAnalysisReady,onDemoReady:(caseName,fresh)=>{
+const entry=initEntryFlow({root,signal,asset,onContext:bridge.onContext,onAnalyzeFiles:bridge.analyzeFiles,onAnalysisReady:bridge.onAnalysisReady,onDemoReady:(caseName,fresh)=>{
+  bridge.onContext?.({caseName: caseName + "（虚构示例）", evidence:EVIDENCE.filter(e=>!e.extra).map(e=>({id:"sample-"+e.id,name:e.title,kind:"text",mimeType:"text/plain",source:"虚构示例",content:[e.subtitle,...(e.lines||[]),...(e.messages||[]).map(m=>m.time+" "+m.speaker+"："+m.text),...(e.fields||[]).map(([k,v])=>k+"："+v)].join("\n")}))});
   if(fresh){
     state=createState();uploadedEvidence.forEach(e=>URL.revokeObjectURL(e.url));uploadedEvidence=[];save();
     centerSelection={type:'evidence',id:'E-02'};centerCatalogQuery='';centerFilter='all';centerQuery='';centerRenderedKey='';

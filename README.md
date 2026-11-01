@@ -65,3 +65,9 @@ AI_MODEL=gpt-4.1-mini
 - C：保留 mock/model 标识、错误反馈和证据回溯；验收空态、上传失败、分析失败和移动端布局。消费现有 AnalysisResult，不自行改变 API 字段。
 
 GitHub Actions 对推送和 PR 执行 lint、测试、生产构建及类型检查。部署前仍需接入持久化、访问控制和请求总大小/频率限制；目前仅适用于受控演示，不宜公开接收敏感材料。
+
+## 对话 Agent
+
+点击右下角「和咪探长聊聊」可直接对话或围绕当前案件追问。模型设置包含 18 家供应商预设及自定义接口，支持 Chat Completions、Anthropic Messages 和 Responses；无需密钥可体验明确标注的本地演示。使用与配置详见 [Agent 文档](docs/AGENT.md)。
+
+浏览器回归：运行应用后执行 `npx playwright install chromium` 和 `npm run test:browser`。

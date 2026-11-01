@@ -4,3 +4,5 @@
 @import "../components/truthtrace/refinements.css";
 @import "../components/truthtrace/onboarding.css";
 @import "../components/truthtrace/contract-workbench.css";
+
+@import "../components/truthtrace/agent.css";
