@@ -39,3 +39,14 @@ describe("证据分析数据契约", () => {
     expect(result.events[0].evidenceRefs[0].evidenceId).toBe("user-note");
   });
 });
+
+it("拒绝重复分析 ID", () => {
+  const invalid = structuredClone(demoAnalysis);
+  invalid.people.push(invalid.people[0]);
+  expect(() => validateAnalysis(invalid, demoEvidence, "mock")).toThrow("ID 重复");
+});
+it("真实模型不能伪造文本引文", () => {
+  const invalid = structuredClone(demoAnalysis);
+  invalid.people[0].evidenceRefs[0].quote = "不存在的捏造原文 abcxyz";
+  expect(() => validateAnalysis(invalid, demoEvidence, "model")).toThrow("引用原文不存在");
+});

@@ -5,22 +5,23 @@ import { EvidenceSchema } from "@/lib/contracts";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
-
 const RequestSchema = z.object({
-  evidence: z.array(EvidenceSchema).min(1).max(30),
+  evidence: z.array(EvidenceSchema).min(1).max(30).refine(
+    items => new Set(items.map(item => item.id)).size === items.length,
+    "证据 ID 不可重复",
+  ),
 });
-
 export async function POST(request: Request) {
+  let body: unknown;
+  try { body = await request.json(); }
+  catch { return NextResponse.json({ error: "请求必须为有效 JSON" }, { status: 400 }); }
+  const parsed = RequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "证据不符合数据契约", details: parsed.error.issues }, { status: 400 });
+  }
   try {
-    const { evidence } = RequestSchema.parse(await request.json());
-    const analysis = await analyzeEvidence(evidence);
-    return NextResponse.json({ analysis });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "证据或模型结果不符合数据契约", details: error.issues }, { status: 400 });
-    }
-
-    const message = error instanceof Error ? error.message : "分析失败";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ analysis: await analyzeEvidence(parsed.data.evidence) });
+  } catch {
+    return NextResponse.json({ error: "分析服务失败或返回结果未通过校验，请稍后重试" }, { status: 502 });
   }
 }

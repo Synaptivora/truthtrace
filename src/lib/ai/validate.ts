@@ -25,11 +25,19 @@ export function validateAnalysis(
     payload.evidenceGaps,
   ];
 
+  if (evidenceIds.size !== evidence.length) throw new Error("证据 ID 重复");
   for (const collection of collections) {
+    if (new Set(collection.map(item => item.id)).size !== collection.length) {
+      throw new Error("分析结果 ID 重复");
+    }
     for (const item of collection) {
       for (const ref of item.evidenceRefs) {
         if (!evidenceIds.has(ref.evidenceId)) {
           throw new Error(`模型引用了不存在的证据：${ref.evidenceId}`);
+        }
+        const source = evidence.find(item => item.id === ref.evidenceId)!;
+        if (analysisMode === "model" && source.kind !== "image" && !source.content.includes(ref.quote)) {
+          throw new Error(`引用原文不存在于证据：${ref.evidenceId}`);
         }
       }
     }
