@@ -15,3 +15,5 @@ __pycache__/
 services/ingestion/_uploads/
 services/ingestion/ai_ingest/output/
 services/ingestion/tests/_*/
+
+artifacts/
