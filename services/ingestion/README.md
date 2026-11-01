@@ -9,8 +9,9 @@
 > ├── server.py            解析服务（唯一入口）
 > ├── requirements.txt     依赖（pypdf / pymupdf<2.0 / pillow / python-docx / openpyxl / python-pptx）
 > ├── ai_ingest/          方案 A：AI 驱动智能取数（5 工具 + agent loop）
-> ├── adapters/           钉钉 / 微信 / 飞书 / pywxdump 适配器 + 媒体解码
-> ├── tests/              12 套测试，全 PASS
+> ├── adapters/           钉钉 / 微信 / 飞书 适配器 + 媒体解码 + 密钥缓存 + 语音转写
+> │                      ⚠️ pywxdump_to_synapse.py / media_decode.py **已弃用**，仅归档
+> ├── tests/              14 套测试，全 PASS（python tests/run_all.py）
 > └── testdata/           构造的演示数据（非真实聊天，可提交）
 > ```
 >
@@ -217,15 +218,37 @@ curl -X POST "http://localhost:8000/parse?max_chars=8000" -F "file=@大合同.pd
 
 ### 超大附件：只有一道闸门（>100MB 不读内容，只回链接 + 解释）
 
-规则只有一条，**没有"拒收"这回事**：
+**这道闸门只治文档，不管图片。** 它存在的唯一理由是防解析超时：
+
+| 类型 | 要不要解析 | 是否受闸门限制 |
+|---|---|---|
+| PDF / Word / Excel / 文本 | 要（抽正文、渲染页面），耗时随体积线性增长 | ✅ **受限** |
+| 图片 | 不要，只是 base64 塞进 `content` | ❌ **不受限** |
 
 | 条件 | 行为 |
 |---|---|
-| **单份附件** > **100MB**（`MAX_CONTENT_SIZE`） | **完全不读内容**（不抽文本、不做 OCR、不渲染），`kind=text`，content 写清体积、原因、**下载链接**；HTTP 仍是 200 |
+| 单份**文档**附件 > **100MB**（`MAX_CONTENT_SIZE`） | **完全不读内容**（不抽文本、不做 OCR、不渲染），`kind=text`，content 写清体积、原因、**下载链接**；HTTP 仍是 200 |
 | ≤ 100MB | 按正常流程处理：扫描件渲染成图给视觉模型、文本型 PDF 抽文本、office 抽正文、纯文本直接读，再按字符预算裁剪 |
 
+> 为什么图片不受限：图片不解析，谈不上"解析太久"，限制它只会造成「图能进、文档不能进」的怪现象。
+> 图片若真大到模型收不下，那是 `analyze` 那一跳的事，应由 B 按 `content` 长度处理，不是在 A 按文件体积拦。
 > 为什么不做 413：用户要的是"原件仍能拿到"。拒收会让他一无所获，而落盘 + 回链接既保留了原件，也让模型有东西可转述。
 > 阈值只量**解析出来的 `file` 字段字节数**，**请求体（Content-Length）不设上限**——multipart 请求体必然比文件大（边界串 + 其他字段），按请求体卡会把"正好 100MB 的文件"误杀。
+
+**两条入口共用同一套口径**（2026-11-01 修复）：
+
+| 入口 | 函数 | 修复前 | 修复后 |
+|---|---|---|---|
+| `POST /parse`（用户上传） | `build_evidence` | 有闸门，但连图片一起管 | 只治文档 |
+| `POST /parse_chat` / `POST /source/sync`（聊天媒体） | `build_media_evidence` | **完全没有闸门** | 只治文档 |
+
+> ⚠️ 曾经渠道取数整段绕过闸门：它不经 B 的 `parser.ts`，而 A 侧又只在上传路径写了判断，
+> 超大文档会一路进解析流程。现已按同一口径补齐，由 `run_chat_media_gate_test.py` 钉死。
+>
+> 另外，视觉模型普遍有「单图」上限（各家 5–20MB 不等），A 不替模型做决定：
+> 图片原始体积超过 `VISION_IMAGE_HINT_MB`（默认 8MB，设 0 关闭）时**只在 `name` 上标注**
+> `xxx.png [原图 12.4 MB，可能超出模型单图上限]`，**content 一字不改**——
+> 让模型有机会自己说"看不清"，而不是被静默截断后照常编造。
 
 content 长这样（模型能原样转述给用户）：
 
@@ -252,11 +275,11 @@ content 长这样（模型能原样转述给用户）：
 二进制内容直接倒进 content（一份几十 MB 的 PDF 变成一坨乱码）。所以 MIME 缺失时按魔数兜底：
 `%PDF` → pdf、`\x89PNG` → png、`\xff\xd8\xff` → jpeg、`GIF8` → gif、`RIFF....WEBP` → webp。
 
-> ⚠️ **A 的 100MB 只管单份附件，且只在「直连 A」时作数。** 真实链路是 C → Next.js `api/evidence/parse` → A，
+> ⚠️ **A 的 100MB 只管单份文档附件，且只在「直连 A」时作数。** 真实链路是 C → Next.js `api/evidence/parse` → A，
 > 而 B 的 `parser.ts` 在转发前就有自己的 8MB 前置检查，所以 >8MB 的文件根本到不了 A——A 的阈值也就不会触发。
 > 想让大附件走 A 的「链接 + 解释」逻辑，只有两条路：B 把前置检查放宽，或 >8MB 直连 A（需 A 开 CORS，待补）。
 
-## 实现进度（对照 A环节任务拆解.md）
+## 实现进度（对照 `docs/A/A环节任务拆解.md`）
 
 | 环节 | 状态 | 说明 |
 |---|---|---|
@@ -267,13 +290,19 @@ content 长这样（模型能原样转述给用户）：
 | A4 聊天(媒体感知) | ✅ | 识别 text/image/file/voice/transfer/system；内联标记 + 独立证据；/parse 单条兼容 |
 | A4 媒体分流 | ✅ | 附件按真实 MIME 落 kind：图片→image(base64)、PDF→pdf(抽文本)、docx/xlsx/pptx→text(抽文本)、**旧版 .doc→text(olefile 尽力抽正文)**、音视频→text(描述占位)；缺附件仍为 image 占位 |
 | A8 其他文档(docx/xlsx/pptx/doc) | ✅ | 抽文本当 text，直接给 B，零联动（python-docx/openpyxl/python-pptx/olefile 可选） |
-| A9 超大附件闸门 | ✅ | **单份附件** >100MB 一律**不读内容**、只回「下载链接 + 解释」（HTTP 200，无拒收）；≤100MB 正常按类型解析（扫描件走图、文本型抽文本）；请求体不设限；MIME 按魔数兜底 |
-| A5 OCR | ⬜ | 待接 OCR 库（截图识字） |
+| A9 超大附件闸门 | ✅ | **只治文档**：单份 PDF / Word / Excel / 文本 >100MB 一律**不读内容**、只回「下载链接 + 解释」（HTTP 200，无拒收）；≤100MB 正常按类型解析（扫描件走图、文本型抽文本）；**图片不受此限**（不解析，只 base64）；请求体不设限；MIME 按魔数兜底 |
+| A5 OCR（截图识字） | ⛔ **不做** | 已决策，理由三条：① 视觉模型读中文聊天截图本就比 RapidOCR 准；② 截图一旦 OCR 成 `kind=chat`，B 的 `validate.ts:44` 会对引文**强制逐字命中**，OCR 中文间的空格会让整条 analyze 400；③ OCR 错字会被「校验通过」洗白，比不校验更危险。**扫描件 PDF 是另一条独立通道**：无文本层时渲染成 PNG 走视觉模型，与 OCR 无关 |
 | A6 微信真机取数 | ✅ | 取数源 **wechat-ai-memory**（PyWxDump 在 4.1.x 取不到密钥且上游已删库）。真实微信实测通过：文字 34 / 图片 5 / 语音 8 / 真实文件 2 → `/parse_chat` 出 chat + 图片 + 文档证据。密钥已加本机缓存：**仅首次需重启微信 + 手机确认，之后导出不再碰微信** |
 
 ## A6 · 微信端取数接入（wechat-ai-memory → A4）
 
-选型结论见项目根 `微信端选型结论.md`。链路：
+取数源是 **wechat-ai-memory**（第三方工具，**不在本仓库**，需另行获取，见下方「环境」）。
+完整接入步骤见 **`docs/A/微信端接入设计.md`**（14 节：数据流、字段映射、契约、媒体矩阵、踩坑清单）。
+> **为什么不是 PyWxDump**：本机微信 4.1.15.56 取不到密钥，且上游 GitHub 于 2025-10-20
+> 因律师函删库，永无 4.x 偏移。仓库里的 `pywxdump_to_synapse.py` / `media_decode.py`
+> 因此**已弃用**，仅作归档保留，不要在新链路里使用。
+
+链路：
 
 ```
 wechat-ai-memory 导出 Version 1 JSON + <导出名>_assets/   （含 .silk 语音、文件原件、解密图片）
@@ -289,11 +318,65 @@ evidences[]  = [chat 证据(source="微信", 含内联标记), *媒体独立证�
 - **不用 OCR**：文字直接来自解密后的本地库；图片/文件的 `content` 是 `_assets` 相对路径。
 - **字段映射**：`is_outgoing=true` → `sender="我"`；`timestamp` → `time`；`type` 原样（text/image/file/voice/system）。
 - **agent 取媒体**：文档/视频按 `_assets` 路径直读原文件（零解码）；图片由取数器解密后落 `_assets`；语音由 `wechat_voice_transcribe.py` 转成文字后内联进对话。
-- 已用**本机真实微信**验证：`Synapse-黑客松` 群 47 条消息（34 text / 5 image）→ 6 条证据；`王茹新` 会话（2 语音 + 2 真文件）→ chat + xlsx 正文 + doc 正文；`游兆旺` 会话 6 条语音全部转写。
+- 已用**本机真实微信**验证：某项目群 47 条消息（34 text / 5 image）→ 6 条证据；某单聊会话（2 语音 + 2 真文件）→ chat + xlsx 正文 + doc 正文；另一单聊会话 6 条语音全部转写。（会话名与联系人已脱敏）
 - 取数据库密钥需**先关微信再拉起 + 手机扫码确认**（密钥只在登录派生那一刻可 Hook）；图片密钥另行从运行中的微信进程内存扫描取得，无需重启。
 - **`type=49` 不等于文件**：接龙(53)/引用(57)/拍一拍(62) 也是 49，必须读 XML `<type>`；只有 `6` 才是真文件，其余按文本/系统处理（适配器已内置该纠正）。
-- 语音转写质量：需 `initial_prompt` 锁简体（否则出繁体），中文建议 `medium` 模型；详见 `微信端选型结论.md` 第 11 节。
+- 语音转写质量：需 `initial_prompt` 锁简体（否则出繁体），中文建议 `medium` 模型；安装方式与已知坑见上文「语音转写（可选）」。
 - 小程序/链接卡片类「文件」消息只有标题文本（形如 `[小程序] xxx.md`），按文本保留，不产出附件证据。
+
+#### A6 环境：wechat-ai-memory 怎么来（不在本仓库）
+
+A 只依赖它的**导出产物**（Version 1 JSON + `<导出名>_assets/`），不 import 它的代码。
+
+- **获取**：原 `LOGO127` 仓库已 404，目前可用社区镜像（`congjin` / `PC267` / `ldfpku` / `ikevss`，v0.3.7-alpha），微信 4.x 原生。
+- **放在仓库外**：建议放在仓库外任意目录（例如 `<仓库外>/wam_probe/`），
+  因此它**不应进 A 的仓库**，但部署时必须有。
+- **密钥缓存补丁（强烈建议）**：上游 `capture_account_key()` 每次都 `taskkill Weixin.exe` 再重启拉起，
+  要重新扫码。打补丁后命中缓存约 **700ms**，且**不再需要微信在线**。
+  位置：`.../sources/wechat4_key_capture.py`；缓存落 `%LOCALAPPDATA%\Synapse\wechat_db_keys.json`。
+- **frida 坑**：wheel 61MB，pypi 直装常被中断 → `curl -C -` 断点续传后本地 `pip install --no-deps`。
+
+### 语音转写（可选，非核心链路）
+
+`adapters/wechat_voice_transcribe.py` 走 SILK → WAV → faster-whisper。
+本机实测**全库仅 9 条语音**，按需安装即可：
+
+```bash
+python -m pip install pysilk faster-whisper   # 建议独立 3.13 venv：ctranslate2 无 py3.14 轮子
+```
+
+- 模型下载：HF 不通、hf-mirror 慢 → 用 **ModelScope `pengzhendong/faster-whisper-*`**（约 15MB/s）。
+- 中文默认 `medium`：必须加 `initial_prompt="以下是普通话的句子。"` + `condition_on_previous_text=False`，
+  否则**输出繁体**、噪声段还会冒英文幻觉；`small` 会明显错听（「十来块的杯子」→「我死了」）。
+
+### 钉钉 / 飞书端取数（适配器已就绪，依赖外部 CLI）
+
+| 渠道 | 外部工具 | 安装 | 适配器 | 状态 |
+|---|---|---|---|---|
+| 钉钉 | `dws`（官方开源 CLI） | 官方安装包 / npm | `adapters/dingtalk_to_synapse.py` | ✅ 真实数据跑通（95 条、8 个媒体全部下载成功） |
+| 飞书 | `lark-cli`（官方开源 CLI） | `npm i -g @larksuite/cli` | `adapters/feishu_to_synapse.py` | 🟡 demo 通过；真机被租户策略挡住（见下） |
+
+- 两者都要先登录：`dws auth login` / `lark-cli config init --new` + `auth login`。
+- 详细接入见 **`docs/A/钉钉端接入设计.md`**（18 节）与 **`docs/A/飞书端选型结论.md`**（含真机验证记录）。
+- ⚠️ **飞书尚未真机跑通**：`lark-cli` 与适配器均就位，但取 token 被平台策略 `21001` 拦住
+  （当前租户不具备 OpenAPI 资质）。**演示只能用合成样例**，见 **`docs/A/飞书端接入现状.md`**。
+  该文档只记现状与阻塞，**未写实现设计**——真机跑通前不固化设计，避免返工。
+- 飞书媒体：`im +chat-messages-list --download-resources` 会一次性下到 `./lark-im-resources/`
+  并回填 `local_path`，适配器优先读它。
+- **飞书的阻塞不是代码问题**：`tenant_access_token` 能拿到（用错误 secret 会返回 `10014`，
+  证明凭证链路正常），但所有 API 返回 **21001「scope blocked by data security policy」**
+  —— 个人版租户无开放平台资质，需换有资质的企业租户或由管理员放行。
+
+### 环境变量
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `PORT` | 8000 | 服务端口（也可 `python server.py --port 9000`） |
+| `MAX_CONTENT_SIZE` | 100MB | 唯一体积闸门；**只作用于文档**，图片不受限 |
+| `VISION_IMAGE_HINT_MB` | 8 | 图片超此值只在 `name` 标注「可能超出模型单图上限」；设 `0` 关闭 |
+| `PUBLIC_BASE_URL` | 按请求 Host 推断 | 超限附件的下载链接前缀 |
+| `CORS_ALLOW_ORIGIN` | `*` | 允许前端直连 A（已全开） |
+| `SYNAPSE_LLM_*` | 空 | 方案 A 的 LLM 配置；不设则走 MockAgent（确定性、可演示） |
 
 ## 对接 TruthTrace
 

@@ -26,6 +26,7 @@ SUITES = [
     "run_pdf_budget_test.py",
     "run_size_gate_test.py",
     "run_file_gate_test.py",
+    "run_chat_media_gate_test.py",
     "run_a4_test.py",
     "run_source_api_test.py",
     "run_ai_ingest_test.py",

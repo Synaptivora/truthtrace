@@ -49,10 +49,16 @@ from pathlib import Path
 CACHE_ENV = "SYNAPSE_WECHAT_KEY_CACHE"
 PAGE_SIZE = 4096
 
+# wechat-ai-memory 是**仓库外的第三方工具**，路径因人而异，不能把某台机器的绝对路径
+# 写死在源码里（对别人永远是 miss，还会把本机目录结构带进仓库）。
+# 定位顺序：显式参数 > 环境变量 SYNAPSE_WECHAT_SRC > 适配器同级的常见相对位置。
 SRC_CANDIDATES = [
-    Path(r"C:/Users/zhuke/wam_probe/src/wechat-ai-memory-main/src"),
     Path(__file__).resolve().parent / "wechat-ai-memory" / "src",
+    Path(__file__).resolve().parent.parent / "wechat-ai-memory" / "src",
 ]
+_ENV_SRC = os.environ.get("SYNAPSE_WECHAT_SRC")
+if _ENV_SRC:
+    SRC_CANDIDATES.insert(0, Path(_ENV_SRC).expanduser())
 
 
 # ---------------------------------------------------------------- 缓存定位

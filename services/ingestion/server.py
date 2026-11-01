@@ -65,6 +65,11 @@ MAX_CONTENT_SIZE = int(os.environ.get(
 ))
 MAX_CONTENT_SIZE_MB = MAX_CONTENT_SIZE / 1024 / 1024
 
+# 视觉模型普遍有「单图」上限，各家不同（常见 5–20MB），A 不替模型做决定。
+# 超过这个值时只在证据名上标注体积，内容一字不改——让模型有机会自己说「看不清」，
+# 而不是被静默截断后照常编造。可用 VISION_IMAGE_HINT_MB 覆盖，设 0 关闭标注。
+VISION_IMAGE_HINT = int(os.environ.get("VISION_IMAGE_HINT_MB", "8")) * 1024 * 1024
+
 # ---- 方案 A：数据源服务（/source/*）----
 # 懒加载且可缺席：ai_ingest 依赖 LLM 客户端与适配器，import 失败不能让整个解析服务起不来。
 # 缺席时 /source/* 返回 501 并说明原因，/parse 与 /parse_chat 不受影响。
@@ -933,12 +938,20 @@ def build_media_evidence(item: dict, media_dir: str | None = None,
         else:
             return _media_placeholder(name, ref, time, origin)
 
+    # ⚠️ 与 /parse 共用同一道闸门，且同样**只治文档**：PDF / Office / 文本要抽正文，
+    # 体积直接决定耗时；图片只做 base64、不解析，不受此限（与上传侧保持一致）。
+    # 本函数原先完全没有体积判断，超大文档会整段进解析流程，这里补上的是文档那一半。
     kind = media_kind(name, mime)
+    if raw and len(raw) > MAX_CONTENT_SIZE and kind != "image":
+        return oversize_evidence(name, mime, raw, origin or "聊天媒体")
 
     if kind == "image":
         url = image_data_url(mime, raw or b"")
         if url:
             content = url
+            if VISION_IMAGE_HINT and raw and len(raw) > VISION_IMAGE_HINT:
+                name = (f"{name} [原图 {len(raw) / 1024 / 1024:.1f} MB，"
+                        f"可能超出模型单图上限]")
             mime = (mime or "").lower().split(";")[0] or "image/png"
             if mime == "image/jpg":
                 mime = "image/jpeg"
@@ -1163,14 +1176,19 @@ def sniff_mime(data: bytes):
 def build_evidence(filename, mime, data: bytes, origin: str | None = None,
                    max_chars: int | None = None, page_range: str | None = None,
                    base_url: str | None = None) -> dict:
-    # 唯一的体积闸门：>100MB 不读内容，只回「链接 + 解释」；≤100MB 一律走下面的正常流程。
-    # 放在最前面是因为解析才是耗时/耗内存的元凶，不能解析完再判断。
-    if data and len(data) > MAX_CONTENT_SIZE:
-        return oversize_evidence(filename, mime, data, origin, base_url)
-
-    # MIME 不可靠时按魔数兜底（否则 PDF 会被当文本，二进制倒进 content）
+    # MIME 不可靠时按魔数兜底（否则 PDF 会被当文本，二进制倒进 content）。
+    # 放在闸门之前，是因为闸门要按类型决定适不适用——判断类型需要可靠的 MIME。
     if (mime or "").lower() in ("", "application/octet-stream", "binary/octet-stream"):
         mime = sniff_mime(data) or mime
+
+    # 唯一的体积闸门：>100MB 不读内容，只回「链接 + 解释」。
+    # ⚠️ **只管需要解析的文档**（PDF / Word / Excel / 文本）：抽正文、渲染页面的耗时
+    # 随体积线性增长，必须在解析之前止损——这道闸门存在的全部理由就是防解析超时。
+    # 图片不解析，只是 base64 塞进 content，不存在「解析太久」，因此**不受此限**。
+    # （图片若大到模型收不下，那是 analyze 那一跳的事，应由 B 按 content 长度处理，
+    #   不是在这里按文件体积拦——这里拦了反而会让「图能进、文档不能进」的怪现象。）
+    if data and len(data) > MAX_CONTENT_SIZE and media_kind(filename or "", mime or "") != "image":
+        return oversize_evidence(filename, mime, data, origin, base_url)
 
     kind = evidence_kind(filename or "", mime or "", data)
     if kind == "image":
