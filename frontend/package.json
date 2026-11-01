@@ -1,0 +1,13 @@
+{
+  "name": "truthtrace-evidence-room",
+  "version": "0.7.0",
+  "private": true,
+  "description": "TruthTrace 现实档案调查局交互演示",
+  "type": "module",
+  "scripts": {
+    "start": "node serve.mjs",
+    "check": "node --check dist/script.js && node --check dist/onboarding.js && node --check dist/case-data.js && node --check dist/investigation.js && node --check serve.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": { "node": ">=22.0.0" }
+}
