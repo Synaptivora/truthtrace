@@ -1,0 +1,100 @@
+{
+  "messages": [
+    {
+      "message_id": "om_demo1",
+      "msg_type": "text",
+      "create_time": "1761441600000",
+      "sender": {
+        "id": "ou_1",
+        "sender_type": "user",
+        "name": "张三"
+      },
+      "content": "{\"text\": \"王五，那笔合作款你什么时候打？合同写的是 8 月 1 日前。\"}",
+      "deleted": false
+    },
+    {
+      "message_id": "om_demo2",
+      "msg_type": "text",
+      "create_time": "1761441660000",
+      "sender": {
+        "id": "ou_2",
+        "sender_type": "user",
+        "name": "王五"
+      },
+      "content": "{\"text\": \"下周吧，最近资金紧。\"}",
+      "deleted": false
+    },
+    {
+      "message_id": "om_demo3",
+      "msg_type": "image",
+      "create_time": "1761441720000",
+      "sender": {
+        "id": "ou_2",
+        "sender_type": "user",
+        "name": "王五"
+      },
+      "content": "{\"image_key\": \"img_v3_demo\"}",
+      "deleted": false,
+      "resources": [
+        {
+          "message_id": "om_demo3",
+          "key": "img_v3_demo",
+          "type": "image",
+          "local_path": "feishu_demo/lark-im-resources/img_v3_demo.png",
+          "size_bytes": 69
+        }
+      ]
+    },
+    {
+      "message_id": "om_demo4",
+      "msg_type": "text",
+      "create_time": "1761441780000",
+      "sender": {
+        "id": "ou_1",
+        "sender_type": "user",
+        "name": "张三"
+      },
+      "content": "{\"text\": \"你上次也说下周，已经拖了两个月了。\"}",
+      "deleted": false
+    },
+    {
+      "message_id": "om_demo5",
+      "msg_type": "post",
+      "create_time": "1761441840000",
+      "sender": {
+        "id": "ou_2",
+        "sender_type": "user",
+        "name": "王五"
+      },
+      "content": "{\"title\": \"还款计划\", \"content\": [[{\"tag\": \"text\", \"text\": \"我先还 \"}, {\"tag\": \"text\", \"text\": \"¥2000 定金\"}, {\"tag\": \"at\", \"user_id\": \"ou_1\", \"user_name\": \"张三\"}, {\"tag\": \"text\", \"text\": \"，剩下的月底给。\"}]]}",
+      "deleted": false
+    },
+    {
+      "message_id": "om_demo6",
+      "msg_type": "audio",
+      "create_time": "1761441900000",
+      "sender": {
+        "id": "ou_2",
+        "sender_type": "user",
+        "name": "王五"
+      },
+      "content": "{\"file_key\": \"file_v3_voice\", \"duration\": 3200}",
+      "deleted": false
+    },
+    {
+      "message_id": "om_demo7",
+      "msg_type": "text",
+      "create_time": "1761441960000",
+      "sender": {
+        "id": "ou_1",
+        "sender_type": "user",
+        "name": "张三"
+      },
+      "content": "{\"text\": \"算了不说了\"}",
+      "deleted": true
+    }
+  ],
+  "total": 7,
+  "has_more": false,
+  "page_token": ""
+}

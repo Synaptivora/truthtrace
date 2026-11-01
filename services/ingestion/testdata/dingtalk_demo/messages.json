@@ -1,0 +1,69 @@
+{
+  "success": true,
+  "result": {
+    "conversationMessagesList": [
+      {
+        "title": "demo_供应商催款群",
+        "openConversationId": "cidDemo==",
+        "singleChat": false,
+        "messages": [
+          {
+            "sender": "张三",
+            "createTime": "2026-07-26 09:20:00",
+            "sendType": "user",
+            "openMessageId": "msg1",
+            "senderOpenDingTalkId": "Do1",
+            "content": "王五，那笔合作款你什么时候打？合同里写的是 8 月 1 日前。"
+          },
+          {
+            "sender": "王五",
+            "createTime": "2026-07-26 09:21:00",
+            "sendType": "user",
+            "openMessageId": "msg2",
+            "senderOpenDingTalkId": "Do2",
+            "content": "下周吧，最近资金紧。"
+          },
+          {
+            "sender": "王五",
+            "createTime": "2026-07-26 09:22:00",
+            "sendType": "user",
+            "openMessageId": "msg3",
+            "senderOpenDingTalkId": "Do2",
+            "content": "这是当时的转账记录\n![image](@demoMediaId)",
+            "attachments": [
+              {
+                "fileName": "转账截图.png"
+              }
+            ]
+          },
+          {
+            "sender": "张三",
+            "createTime": "2026-07-26 09:23:00",
+            "sendType": "user",
+            "openMessageId": "msg4",
+            "senderOpenDingTalkId": "Do1",
+            "content": "你上次也说下周，已经拖了两个月了。"
+          },
+          {
+            "sender": "王五",
+            "createTime": "2026-07-26 09:24:00",
+            "sendType": "user",
+            "openMessageId": "msg5",
+            "senderOpenDingTalkId": "Do2",
+            "content": "[语音]"
+          },
+          {
+            "sender": "张三",
+            "createTime": "2026-07-26 09:25:00",
+            "sendType": "user",
+            "openMessageId": "msg6",
+            "senderOpenDingTalkId": "Do1",
+            "content": "已转 ¥2000 定金，转账记录在群里。"
+          }
+        ]
+      }
+    ],
+    "hasMore": false,
+    "nextCursor": "0"
+  }
+}

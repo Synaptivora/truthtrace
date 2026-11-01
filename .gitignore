@@ -8,3 +8,11 @@ coverage/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Python（A 解析服务）
+__pycache__/
+*.py[cod]
+.venv/
+services/ingestion/_uploads/
+services/ingestion/ai_ingest/output/
+services/ingestion/tests/_*/
