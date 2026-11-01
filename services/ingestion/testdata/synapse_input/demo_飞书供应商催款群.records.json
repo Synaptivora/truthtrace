@@ -1,0 +1,65 @@
+[
+  {
+    "seq": 1,
+    "sender": "张三",
+    "time": "2025-10-26 09:20:00",
+    "text": "王五，那笔合作款你什么时候打？合同写的是 8 月 1 日前。",
+    "type": "text",
+    "media": "",
+    "amount": ""
+  },
+  {
+    "seq": 2,
+    "sender": "王五",
+    "time": "2025-10-26 09:21:00",
+    "text": "下周吧，最近资金紧。",
+    "type": "text",
+    "media": "",
+    "amount": ""
+  },
+  {
+    "seq": 3,
+    "sender": "王五",
+    "time": "2025-10-26 09:22:00",
+    "text": "",
+    "type": "image",
+    "media": "feishu_demo/lark-im-resources/img_v3_demo.png",
+    "amount": ""
+  },
+  {
+    "seq": 4,
+    "sender": "张三",
+    "time": "2025-10-26 09:23:00",
+    "text": "你上次也说下周，已经拖了两个月了。",
+    "type": "text",
+    "media": "",
+    "amount": ""
+  },
+  {
+    "seq": 5,
+    "sender": "王五",
+    "time": "2025-10-26 09:24:00",
+    "text": "还款计划我先还 ¥2000 定金@张三，剩下的月底给。",
+    "type": "text",
+    "media": "",
+    "amount": "2000"
+  },
+  {
+    "seq": 6,
+    "sender": "王五",
+    "time": "2025-10-26 09:25:00",
+    "text": "",
+    "type": "voice",
+    "media": "file_v3_voice",
+    "amount": ""
+  },
+  {
+    "seq": 7,
+    "sender": "张三",
+    "time": "2025-10-26 09:26:00",
+    "text": "[该消息已撤回]",
+    "type": "system",
+    "media": "",
+    "amount": ""
+  }
+]

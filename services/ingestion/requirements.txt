@@ -1,0 +1,44 @@
+# A（数据接入）服务依赖
+# 运行环境实测：Python 3.14.3 / Windows 11
+# 安装：python -m pip install -r requirements.txt
+#      （若默认源慢，加 -i https://pypi.tuna.tsinghua.edu.cn/simple）
+
+# --- PDF：文本型抽正文 / 扫描件渲染成 PNG 走视觉通道 ---
+pypdf>=6.0
+# ⚠️ 必须锁 <2.0。
+# pymupdf 2.0 在 Windows + Python 3.14.3 上 `import pymupdf` 直接 SIGSEGV（段错误）：
+# 不是 ImportError，try/except 兜不住，会打死整个服务进程——比不装更危险。
+# 实测 1.28.2 正常。
+pymupdf>=1.24,<2.0
+
+# --- 图片：bmp/tiff → png 转码、聊天媒体解码、尺寸判断 ---
+pillow>=10.0
+
+# --- Office 文档抽正文（缺失时 A8 会抛 RuntimeError 并提示装哪个）---
+python-docx>=1.1
+openpyxl>=3.1
+python-pptx>=0.6
+
+
+# ============================================================================
+# 可选：语音转写（仅微信语音需要，非核心链路）
+# ============================================================================
+# 本机实测全库仅 9 条语音，因此**不写进上面的必装清单**，按需单独装：
+#   python -m pip install pysilk faster-whisper
+# ⚠️ ctranslate2 没有 py3.14 轮子，建议用独立的 3.13 venv 跑。
+# 模型下载走 ModelScope（pengzhendong/faster-whisper-*）≈15MB/s，HF 不通、hf-mirror 慢。
+# 中文必须 medium 模型 + initial_prompt="以下是普通话的句子。"，否则输出繁体。
+
+# ============================================================================
+# 以下**故意不装**
+# ============================================================================
+# 不要装任何 OCR 引擎：rapidocr / rapidocr-onnxruntime / onnxruntime /
+# opencv-python / pytesseract / paddleocr。
+#
+# 截图一律当 kind="image" 交给 B 的视觉模型，A 不做本地 OCR。
+# 理由见《A环节任务拆解.md》的 A5 小节（已决策不做），核心两条：
+#   1) 视觉模型读中文聊天截图本来比 OCR 准；
+#   2) 截图一旦 OCR 成 kind=chat，`validate.ts` 就会对引文强制逐字命中，
+#      OCR 文本里中文间的空格会让整条分析链路 400。
+#
+# 注意：pip 装 onnxruntime 会顺带拉 numpy/opencv（约 +110MB），装了也没人用。

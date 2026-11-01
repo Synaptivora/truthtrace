@@ -1,0 +1,103 @@
+/* Mascot identity, focused evidence and the dedicated presentation surface. */
+.brand { gap:9px; margin-left:0; margin-right:0; }
+.brand-seal { width:52px; height:52px; flex:0 0 52px; border-color:#b8956088; border-radius:17px; background:radial-gradient(ellipse at 50% 85%,#a778333d,transparent 70%),#201c17; box-shadow:inset 0 0 0 3px #201c17,0 3px 9px #0005; }
+.brand-seal img { width:66px; height:66px; max-width:none; position:absolute; bottom:-1px; left:-7px; object-fit:contain; filter:drop-shadow(0 2px 2px #0006); transition:transform .25s; }
+.brand:hover .brand-seal img { transform:translateY(-3px) rotate(-4deg); }
+.brand strong { font-size:22px; }
+.brand small { font-size:9px; letter-spacing:.8px; }
+.detective-cat { padding:0; border:0; background:transparent; pointer-events:auto; cursor:pointer; overflow:visible; touch-action:manipulation; }
+.detective-cat>img { width:100%; height:100%; object-fit:contain; transform-origin:50% 90%; transition:transform .25s; }
+.detective-cat:hover>img { transform:translateY(-4px) rotate(-3deg); }
+.detective-cat.petting>img { animation:cat-petted .85s ease-in-out; }
+.cat-reaction { position:absolute; left:65%; bottom:90%; min-width:125px; border:1px solid #b48649; border-radius:10px 10px 10px 2px; background:#32251a; color:#f6d7a7; padding:9px 11px; font-size:11px; box-shadow:0 4px 10px #0005; opacity:0; transform:translateY(5px); pointer-events:none; transition:opacity .2s,transform .2s; }
+.petting .cat-reaction { opacity:1; transform:translateY(0); }
+@keyframes cat-petted { 0%,100% { transform:translateY(0) rotate(0); } 25% { transform:translateY(-10px) rotate(-7deg); } 55% { transform:translateY(-3px) rotate(5deg); } 75% { transform:translateY(-6px) rotate(-3deg); } }
+.center-assistant-profile>img { width:65px; height:72px; object-fit:contain; }
+.center-assistant-profile>div { min-width:0; }
+.center-assistant-profile strong { font-size:16px; line-height:1.6; white-space:normal; }
+.center-presentation-label { display:inline; }
+#fullscreenButton { width:auto; display:flex; align-items:center; gap:6px; padding:8px 10px; color:#f9d7a3; background:linear-gradient(135deg,#8a5c2e99,#50351d); border-color:#dba86280; font-size:11px; white-space:nowrap; }
+.graph-focus-bar { display:flex; flex:0 0 auto; align-items:center; gap:10px; padding:10px 15px; color:#f3d5a5; background:linear-gradient(100deg,#64472a,#30251c); border-bottom:1px solid #c99a5966; position:relative; z-index:5; }
+.graph-focus-bar>span { margin-right:auto; display:flex; align-items:center; gap:12px; }
+.graph-focus-bar small { color:#ffd18a; font-size:11px; }
+.graph-focus-bar strong { font-size:12px; font-weight:500; }
+.graph-focus-bar button { padding:6px 9px; border:1px solid #b78b4a66; border-radius:4px; background:#a270342e; color:#f0c98e; font-size:11px; white-space:nowrap; }
+.graph-focus-bar button:last-child { color:#c2ad8b; border-color:transparent; background:transparent; }
+.board-world { transition:transform .45s cubic-bezier(.22,.7,.22,1); }
+.canvas-dragging .board-world { transition:none; }
+.has-finding-focus .evidence-node:not(.node-focused):not(.central-node) { opacity:.25; filter:saturate(.45); }
+.has-finding-focus .central-node { opacity:.65; }
+.evidence-node.node-focused { z-index:6; outline:3px solid #ffe1a2; outline-offset:5px; box-shadow:0 0 0 7px #bc7c3155,0 0 30px #ffcb6977,2px 8px 9px #29120888; }
+.node-focused .node-category { color:#9c4b20; font-weight:700; }
+.has-finding-focus .evidence-threads path:not(.thread-focused) { opacity:.13; }
+.has-finding-focus .evidence-threads .thread-focused { opacity:1; stroke:#ffe1a2; stroke-width:4; filter:drop-shadow(0 0 3px #e69a35); }
+.has-finding-focus .thread-label { opacity:.3; }
+.finding-paper.finding-selected { outline:2px solid #efbf78; outline-offset:3px; box-shadow:0 0 18px #e5ad593b; }
+.immersive-context { display:none; }
+body.presenting-graph { overflow:hidden; }
+.investigation-layout.graph-presenting { position:fixed; inset:0; z-index:60; width:100vw; height:100svh; min-height:0; padding:12px 16px 15px; gap:12px 16px; grid-template-columns:minmax(0,1fr) clamp(260px,22vw,340px); grid-template-rows:48px minmax(0,1fr); background:radial-gradient(ellipse at 70% 0,#6a432733,transparent 55%),#1b1814; }
+.graph-presenting .immersive-context { display:flex; grid-column:1/-1; align-items:center; gap:24px; padding:0 4px 8px; border-bottom:1px solid #c1945244; }
+.immersive-context>div { display:flex; align-items:center; gap:13px; }
+.immersive-context>div>span { color:#bb9560; font-size:10px; letter-spacing:1px; }
+.immersive-context strong { color:#f2dcba; font:500 19px var(--serif); }
+.immersive-context p { color:#c8ae85; font-size:11px; margin:0 0 0 auto; }
+.immersive-context>small { color:#92806a; font-size:10px; white-space:nowrap; }
+.graph-presenting .evidence-wall { width:100%; height:100%; min-height:0; }
+.graph-presenting .wall-frame { height:100%; }
+.graph-presenting .board-viewport { min-height:0; }
+.graph-presenting .findings-column { display:flex; flex-direction:column; min-height:0; overflow-y:auto; padding:2px 3px 4px; gap:12px; scrollbar-width:thin; scrollbar-color:#926d4388 transparent; }
+.graph-presenting .findings-column .leather-panel { align-self:stretch; }
+.graph-presenting .finding-title h3 { font-size:14px; }
+.graph-presenting .finding-paper p { font-size:12px; line-height:1.9; }
+.graph-presenting .finding-sources { font-size:11px; }
+.graph-presenting .finding-paper { padding:17px 15px 13px; }
+.graph-presenting .detective-cat { left:3px; bottom:3px; width:80px; height:120px; }
+.graph-presenting .board-bottom { padding-left:82px; }
+.graph-presenting .case-index { display:none; }
+.graph-presenting .board-caption { display:flex; font-size:11px; }
+@media(max-width:1200px) {
+  .graph-presenting .view-tabs { display:none; }
+  .graph-focus-bar>span { flex-direction:column; align-items:flex-start; gap:3px; }
+  .graph-focus-bar { gap:5px; padding:8px 10px; }
+  .graph-presenting .immersive-context { gap:12px; }
+  .immersive-context strong { font-size:17px; }
+  .immersive-context>small { display:none; }
+  .graph-presenting .board-bottom { padding-left:70px; }
+  .graph-presenting .board-caption { font-size:10px; gap:7px; }
+  .graph-presenting .detective-cat { width:65px; height:98px; }
+}
+@media(max-width:700px) {
+  #fullscreenButton { font-size:10px; padding:7px; }
+  #fullscreenButton svg { display:none; }
+  .wall-header-actions { gap:5px; }
+  .graph-focus-bar { flex-wrap:wrap; }
+  .graph-focus-bar>span { flex:1 0 100%; flex-direction:row; }
+  .graph-focus-bar strong { font-size:11px; }
+  .investigation-layout.graph-presenting { grid-template-columns:1fr; grid-template-rows:48px minmax(280px,1fr) 165px; padding:8px; gap:8px; }
+  .graph-presenting .immersive-context { flex-wrap:wrap; gap:3px; padding-bottom:5px; }
+  .immersive-context>div { gap:8px; }
+  .immersive-context strong { font-size:15px; }
+  .immersive-context>div>span { font-size:8px; }
+  .immersive-context p { margin:0; flex:1 0 100%; font-size:9px; }
+  .graph-presenting .findings-column { display:block; }
+  .graph-presenting .findings-panel { padding:10px; }
+  .graph-presenting .findings-panel .panel-heading { display:none; }
+  .graph-presenting .paper-stack { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .graph-presenting .finding-paper { margin:0; padding:9px; }
+  .graph-presenting .finding-title h3 { font-size:11px; line-height:1.7; }
+  .graph-presenting .finding-paper p { font-size:10px; line-height:1.7; }
+  .graph-presenting .finding-number,.graph-presenting .finding-status,.graph-presenting .next-panel,.graph-presenting .verification-note { display:none; }
+  .graph-presenting .finding-sources { font-size:9px; }
+  .graph-presenting .wall-header { height:48px; flex-basis:48px; padding:0 6px; }
+  .graph-presenting .brass-plaque { padding:7px 10px; gap:6px; }
+  .graph-presenting .brass-plaque h2 { font-size:15px; letter-spacing:1px; }
+  .graph-presenting .brass-plaque svg { width:18px; height:18px; }
+  .graph-presenting .notebook-toolbar-button>span { display:none; }
+  .graph-presenting .board-bottom { padding-left:10px; }
+  .graph-presenting .detective-cat { display:none; }
+  .graph-presenting .board-caption { gap:7px; font-size:8px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .board-world,.detective-cat>img,.brand-seal img { transition:none; }
+  .detective-cat.petting>img { animation:none; }
+}

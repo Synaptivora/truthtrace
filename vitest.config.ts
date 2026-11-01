@@ -4,6 +4,6 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "src/components/truthtrace/**/*.test.ts"],
   },
 });
