@@ -39,6 +39,13 @@ body.case-entry { background:radial-gradient(ellipse at 75% 6%,#6b47272e,transpa
 .entry-primary:hover { filter:brightness(1.08); transform:translateY(-1px); }
 .entry-primary:disabled { cursor:default; filter:saturate(.2); opacity:.4; transform:none; }
 .entry-primary svg { width:16px; height:16px; }
+/* 入口三选一：手动创建（主）/ 从钉钉导入 / 从微信导入（次） */
+.entry-create-actions { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:9px; margin:0 0 2px; }
+.entry-channel { display:inline-flex; align-items:center; gap:8px; min-height:43px; padding:11px 18px; border:1px solid #ac864966; border-radius:7px; background:linear-gradient(125deg,#3a3527,#2a2a21); color:#d9c6a2; font-size:11.5px; transition:border-color .15s,color .15s,transform .15s; }
+.entry-channel:hover { border-color:#d9a36499; color:#f2dcb6; transform:translateY(-1px); }
+.entry-channel svg { width:15px; height:15px; }
+.entry-channel:nth-of-type(2):hover { border-color:#6ba0e099; color:#d8e8fb; }
+.entry-channel:nth-of-type(3):hover { border-color:#8fc98f99; color:#ddf3d7; }
 .entry-text-button { background:transparent; border:0; color:#b79b6d; font-size:11px; padding:8px 0; line-height:1.6; }
 .entry-text-button:hover { color:#f1cf94; }
 .empty-case-surface>.entry-text-button { margin-top:12px; }

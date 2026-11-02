@@ -111,12 +111,41 @@ class MockBackend(SourceBackend):
             {"seq": 6, "sender": "张三", "time": "2026-07-26 09:25:00",
              "text": "已转 ¥2000 定金，转账记录在群里。", "type": "transfer", "media": "", "amount": "2000"},
         ]
-        self.conversations = [{
-            "id": "cid_demo",
-            "title": "demo_供应商催款群",
-            "source": "mock",
-            "records": records,
-        }]
+        # 第二、第三段会话用于演示「按会话多选导入」：
+        # 导入页左侧列表要能真正勾选多段，单会话数据看不出多选效果。
+        project = [
+            {"seq": 1, "sender": "李四", "time": "2026-08-03 10:02:00",
+             "text": "合同附件我传到群里了，付款节点按里程碑走。", "type": "text", "media": "", "amount": ""},
+            {"seq": 2, "sender": "张三", "time": "2026-08-03 10:05:00",
+             "text": "第一阶段验收单什么时候出？", "type": "text", "media": "", "amount": ""},
+            {"seq": 3, "sender": "王五", "time": "2026-08-03 10:07:00",
+             "text": "本周五之前给。", "type": "text", "media": "", "amount": ""},
+            {"seq": 4, "sender": "王五", "time": "2026-08-09 16:40:00",
+             "text": "验收单已签字，扫描件如下。", "type": "image", "media": png_path, "amount": ""},
+            {"seq": 5, "sender": "李四", "time": "2026-08-09 16:45:00",
+             "text": "收到，按约定 3 个工作日内走首款。", "type": "text", "media": "", "amount": ""},
+        ]
+        private = [
+            {"seq": 1, "sender": "李四", "time": "2026-09-12 21:15:00",
+             "text": "那笔款我这边催过财务了，本周内应该到。", "type": "text", "media": "", "amount": ""},
+            {"seq": 2, "sender": "张三", "time": "2026-09-12 21:18:00",
+             "text": "上周也是这么说。", "type": "text", "media": "", "amount": ""},
+            {"seq": 3, "sender": "李四", "time": "2026-09-12 21:20:00",
+             "text": "先转 ¥500 表示诚意。", "type": "transfer", "media": "", "amount": "500"},
+        ]
+        # 演示数据显式标注「谁是我」：没有 is_self 时前端只能猜，
+        # 猜错就会把别人说的话画到自己这一侧（真实数据已改为按 id 判定）。
+        self_ids = {"张三": "u_self", "王五": "u_wang", "李四": "u_li"}
+        for group in (records, project, private):
+            for rec in group:
+                rec["sender_id"] = self_ids.get(rec["sender"], "")
+                if rec["sender"] == "张三":
+                    rec["is_self"] = True
+        self.conversations = [
+            {"id": "cid_demo", "title": "demo_供应商催款群", "source": "mock", "records": records},
+            {"id": "cid_demo_project", "title": "demo_项目对接群", "source": "mock", "records": project},
+            {"id": "cid_demo_private", "title": "demo_与李四的单聊", "source": "mock", "records": private},
+        ]
         self._index()
 
 

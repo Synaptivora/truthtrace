@@ -5,7 +5,7 @@ it("accepts a text file larger than the former 8 MiB limit", async () => {
  vi.stubEnv("INGESTION_SERVICE_URL", "");
  const text = "x".repeat(9 * 1024 * 1024);
  const result = await parseEvidenceFile(new File([text], "large.txt", { type: "text/plain" }));
- expect(result.content).toHaveLength(text.length);
+ expect(result[0].content).toHaveLength(text.length);
 });
 it("forwards files above 100 MiB without a size precheck", async () => {
  vi.stubEnv("INGESTION_SERVICE_URL", "http://localhost:8000");
@@ -13,7 +13,7 @@ it("forwards files above 100 MiB without a size precheck", async () => {
  Object.defineProperty(file, "size", { value: 101 * 1024 * 1024 });
  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ evidence: { id: "large", name: file.name, kind: "pdf", mimeType: file.type, content: "parsed" } })));
  vi.stubGlobal("fetch", fetcher);
- expect((await parseEvidenceFile(file)).content).toBe("parsed");
+ expect((await parseEvidenceFile(file))[0].content).toBe("parsed");
  expect(fetcher).toHaveBeenCalledOnce();
 });
 it("preserves actionable errors from the ingestion service", async () => {

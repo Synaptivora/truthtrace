@@ -19,6 +19,26 @@ KNOWN_TYPES = {
 
 KINDS = {"text", "chat", "image", "pdf"}
 
+_MEDIA_LABEL = {"image": "图片", "file": "文件", "voice": "语音"}
+
+
+def _media_display_name(media: str, kind: str, time: str) -> str:
+    """媒体的展示名。
+
+    dws 这类接口给的是 mediaId（一长串带 ?x-oss-... 的标识），不是文件名；
+    直接 basename 会把它当名字写进证据标题，前端列表里就是一屏乱码。
+    只有「看起来像文件」时才用 basename，否则退回「图片 · 时间」。
+    """
+    label = _MEDIA_LABEL.get(kind, "媒体")
+    if media.startswith("data:"):
+        return f"{label}(内嵌)"
+    base = os.path.basename(media)
+    looks_like_file = bool(base) and len(base) <= 80 and "?" not in base and "=" not in base \
+        and os.path.splitext(base)[1]
+    if looks_like_file:
+        return base
+    return f"{label} · {time}" if time else label
+
 
 def _coerce_record(rec: dict) -> dict | None:
     if not isinstance(rec, dict):
@@ -54,19 +74,19 @@ def build_chat_content(records) -> tuple[str, list]:
             if not media:
                 lines.append(f"{ts}{sender}: {text or '[图片]'}")
                 continue
-            name = "图片(内嵌)" if media.startswith("data:") else (os.path.basename(media) or "图片")
+            name = _media_display_name(media, "image", time)
             lines.append(f"{ts}{sender}: [图片@{time}: {name} 见独立证据]")
             media_list.append({"name": name, "media_ref": media, "kind_hint": "image", "time": time})
         elif t == "file":
             if not media:
                 lines.append(f"{ts}{sender}: {text or '[文件]'}")
                 continue
-            name = "文件(内嵌)" if media.startswith("data:") else (os.path.basename(media) or "文件")
+            name = _media_display_name(media, "file", time)
             lines.append(f"{ts}{sender}: [文件:{name}@{time} 见独立证据]")
             media_list.append({"name": name, "media_ref": media, "kind_hint": "file", "time": time})
         elif t == "voice":
             if media:
-                vname = "语音(内嵌)" if media.startswith("data:") else (os.path.basename(media) or "语音")
+                vname = _media_display_name(media, "voice", time)
                 lines.append(f"{ts}{sender}: [语音@{time}: {vname} 见独立证据]")
                 media_list.append({"name": vname, "media_ref": media, "kind_hint": "voice", "time": time})
             else:
@@ -108,9 +128,37 @@ def _media_to_evidence(item: dict, source: str) -> dict:
     return {
         "id": str(uuid.uuid4()), "name": name, "kind": "text",
         "mimeType": "text/plain",
-        "content": f"[媒体文件缺失: {media or name}]",
+        # 未下载的媒体：只说「没有文件体」，不把渠道内部 mediaId 当正文倒给模型和用户
+        "content": f"[未下载的媒体：{name}] 渠道导出时未包含文件体，如需原件请在渠道内单独导出",
         "source": source,
     }
+
+
+def clip_text(text: str, budget: int) -> tuple[str, bool, int, int]:
+    """按行把正文裁到预算内，返回 (正文, 是否裁剪, 保留行数, 总行数)。
+
+    与 server.py 的 apply_text_budget 同语义：**按整行保留**，不把一条消息拦腰截断；
+    只有单行本身就超预算时才硬切。裁剪一定在正文尾部留说明，绝不静默丢内容。
+    """
+    raw = text or ""
+    lines = raw.split("\n")
+    total = len(lines)
+    if budget <= 0 or len(raw) <= budget:
+        return raw, False, total, total
+
+    kept: list[str] = []
+    used = 0
+    for line in lines:
+        cost = len(line) + 1
+        if used + cost > budget:
+            break
+        kept.append(line)
+        used += cost
+    if not kept:
+        kept = [raw[: max(0, budget)]]
+
+    tail = f"\n…（已截断：原文共 {total} 行 / {len(raw)} 字，本次只保留前 {len(kept)} 行）"
+    return "\n".join(kept) + tail, True, len(kept), total
 
 
 def build_chat_bundle(records, name: str | None = None, source: str = "用户上传") -> list:

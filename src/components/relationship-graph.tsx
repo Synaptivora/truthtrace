@@ -7,6 +7,12 @@ import type { AnalysisResult, Evidence } from "@/lib/contracts";
 
 const noEvidence: Evidence[] = [];
 const noFocus: string[] = [];
+/** 人物卡片网格参数：宽度固定，高度按 4 行摘要估，间距留出连线标签的位置 */
+const PERSON_COLUMNS = 3;
+const PERSON_W = 200;
+const PERSON_H = 186;
+const PERSON_GAP_X = 46;
+const PERSON_GAP_Y = 62;
 export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvidenceIds = noFocus, onOpenEvidence }: {
   analysis: AnalysisResult;
   evidence?: Evidence[];
@@ -17,14 +23,23 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
   const selectedPerson = analysis.people.find(person => person.id === personId);
   const canvas = useRef<HTMLDivElement>(null);
   const flow = useRef<ReactFlowInstance | null>(null);
+  // 材料卡片接在人物网格下面，避免人物的摘要溢出后盖住材料
+  const evidenceTop =
+    (Math.ceil(analysis.people.length / PERSON_COLUMNS) * (PERSON_H + PERSON_GAP_Y) || 0) +
+    (analysis.people.length ? 70 : 0);
   const nodes = useMemo<Node[]>(
     () =>
       [...analysis.people.map((person, index) => {
-        const angle = (index / Math.max(analysis.people.length, 1)) * Math.PI * 2 - Math.PI / 2;
-        const radius = analysis.people.length > 1 ? 145 : 0;
+        // 网格布局，不再把人物摆成半径 145 的圆：4 个人时圆心角只有 90°，
+        // 176px 宽的卡片一定互相压住（实测「本人」和「97个涨停板」直接叠在一起）。
+        const column = index % PERSON_COLUMNS;
+        const row = Math.floor(index / PERSON_COLUMNS);
         return {
           id: person.id,
-          position: { x: 310 + Math.cos(angle) * radius, y: 120 + Math.sin(angle) * radius },
+          position: {
+            x: column * (PERSON_W + PERSON_GAP_X),
+            y: row * (PERSON_H + PERSON_GAP_Y),
+          },
           data: {
             label: (
               <div className="graph-node-content">
@@ -35,7 +50,7 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
             ),
           },
           style: {
-            width: 176,
+            width: PERSON_W,
             border: "1px solid #b78d53",
             borderRadius: 4,
             background: "#ecddbc",
@@ -45,11 +60,11 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
         };
       }), ...evidence.map((item, index) => ({
         id: `evidence:${item.id}`,
-        position: { x: (index % 4) * 210, y: 430 + Math.floor(index / 4) * 150 },
+        position: { x: (index % 4) * 210, y: evidenceTop + Math.floor(index / 4) * 150 },
         data: { label: <button className="contract-graph-evidence nodrag" onClick={() => onOpenEvidence?.(item.id)}><small>原始材料 / {index + 1}</small><strong>{item.name}</strong><span>打开原文 ↗</span></button> },
         style: { width: 180, border: focusedEvidenceIds.includes(item.id) ? "3px solid #ffe0a0" : "1px solid #b78d53", borderRadius: 4, background: "#ecddbc", color: "#503820", boxShadow: focusedEvidenceIds.includes(item.id) ? "0 0 25px #ffcc7580" : "2px 7px 12px #35200f55", opacity: focusedEvidenceIds.length && !focusedEvidenceIds.includes(item.id) ? 0.35 : 1 },
       }))],
-    [analysis.people, evidence, focusedEvidenceIds, onOpenEvidence],
+    [analysis.people, evidence, evidenceTop, focusedEvidenceIds, onOpenEvidence],
   );
 
   const edges = useMemo<Edge[]>(

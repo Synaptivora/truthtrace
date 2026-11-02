@@ -53,6 +53,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -72,6 +73,12 @@ _TYPE_MAP = {
 }
 
 _K_SENDER = ("sender", "senderNick", "senderName", "from", "name", "senderId", "nick")
+# 发送者稳定标识：dws 给 senderOpenDingTalkId，exporter 给 senderStaffId/senderId。
+# 有了它才能判断「哪条是我发的」——只靠昵称，改个群昵称就认错人。
+_K_SENDER_ID = ("senderOpenDingTalkId", "senderStaffId", "senderId", "from_id",
+                "sender_id", "openDingTalkId", "senderUnionId")
+# 导出侧若已标注方向（微信导出常见 isSender / is_sender），优先采信
+_K_SELF_FLAG = ("isSelf", "is_self", "isSender", "is_sender", "fromMe", "from_me", "self")
 _K_TIME = ("createTime", "sendTime", "timestamp", "time", "gmtCreate", "msgTime")
 _K_TEXT = ("content", "text", "msg", "body", "plainText")
 _K_TYPE = ("msgType", "messageType", "type", "kind", "contentType")
@@ -200,7 +207,7 @@ def _find_local(att: Dict[str, Any], attachments_dir: Optional[str]) -> Optional
 
 
 def _download_media(conv_id: str, msg_id: str, media_id: str, out_dir: str,
-                    dws_bin: str) -> Optional[str]:
+                    dws_bin: str, timeout: int = 120) -> Optional[str]:
     """调 dws 官方 download-media 下载一条媒体，返回本地路径；失败返回 None。"""
     os.makedirs(out_dir, exist_ok=True)
     before = set(os.listdir(out_dir))
@@ -209,7 +216,7 @@ def _download_media(conv_id: str, msg_id: str, media_id: str, out_dir: str,
             [dws_bin, "chat", "message", "download-media", "--type", "mediaId",
              "--resource-id", media_id, "--message-id", msg_id,
              "--open-conversation-id", conv_id, "--output", out_dir],
-            capture_output=True, timeout=120, check=False,
+            capture_output=True, timeout=timeout, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -217,7 +224,129 @@ def _download_media(conv_id: str, msg_id: str, media_id: str, out_dir: str,
     if not after:
         return None
     newest = max((os.path.join(out_dir, n) for n in after), key=os.path.getmtime)
+    if not os.path.isfile(newest) or os.path.getsize(newest) <= 0:
+        return None
     return os.path.abspath(newest).replace("\\", "/")
+
+
+_IMG_RES_TYPES = ("image", "picture")
+_MEDIA_ID_RE = re.compile(r"\(mediaId=(\$?[^)\s]+)\)")
+
+
+def _image_resource(rec: Dict[str, Any], content: str) -> str:
+    """取一条消息的图片资源 id：resources[].resourceId 优先，其次正文里的 mediaId。"""
+    for att in _attachments(rec):
+        if str(att.get("resourceType") or "").lower() in _IMG_RES_TYPES:
+            rid = str(att.get("resourceId") or "").strip()
+            if rid:
+                return rid
+    if "[图片消息]" in content:
+        m = _MEDIA_ID_RE.search(content) or _IMG_MD_RE.search(content)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def _shrink_image(raw: str, target: str, max_edge: int = 1280,
+                  quality: int = 82) -> str:
+    """把下载到的图片缩到长边 max_edge 再存 JPEG，压掉后续 base64 的体量。
+
+    聊天截图多是 1080×2400、单张 1MB 起步；长边 1280 仍能看清文字，
+    压完通常 100~250KB。Pillow 缺失或解码失败时原样返回，绝不因此丢图。
+    """
+    try:
+        from PIL import Image
+    except Exception:  # noqa: BLE001
+        return raw
+    try:
+        with Image.open(raw) as img:
+            img.load()
+            if img.mode in ("RGBA", "LA", "P"):
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                rgba = img.convert("RGBA")
+                bg.paste(rgba, mask=rgba.split()[-1])
+                img = bg
+            else:
+                img = img.convert("RGB")
+            img.thumbnail((max_edge, max_edge), Image.LANCZOS)
+            os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+            img.save(target, "JPEG", quality=quality, optimize=True)
+        if os.path.isfile(target) and os.path.getsize(target) > 0:
+            return target.replace("\\", "/")
+    except Exception:  # noqa: BLE001
+        return raw
+    return raw
+
+
+def fetch_images(convs: List[Dict[str, Any]], out_dir: str, dws_bin: Optional[str], *,
+                 limit: int = 40, budget: float = 25.0, workers: int = 8,
+                 max_edge: int = 1280, quality: int = 82) -> Dict[str, Any]:
+    """把钉钉消息里的图片真正下载下来，就地写 `_local_media`。
+
+    为什么必须在这一步做：dws 的 `list` 只给 mediaId 和带签名的 OSS 地址——
+    前者不能直接读，后者在本机被网络策略挡住（http 502、https 超时），
+    实测只有 `dws chat message download-media` 能拿到文件体（约 2.5s/张）。
+    一旦把 mediaId 原样交给证据层，图片就退化成「未下载的媒体」文本占位，
+    这就是「导入后看不到图」的根因。
+
+    只处理 image：文件/语音可能是几百 MB，留给用户按需单独导。
+    返回的统计回给 scan，前端据此说明「取回了几张」。
+    """
+    stats: Dict[str, Any] = {"downloaded": 0, "failed": 0, "skipped": 0,
+                             "reused": 0, "seconds": 0.0}
+    if not convs or not dws_bin:
+        return stats
+    t0 = time.time()
+    deadline = t0 + max(5.0, budget)
+    jobs: List[Tuple[str, Dict[str, Any], str]] = []
+    for conv in convs:
+        cid = str(conv.get("openConversationId") or "")
+        for rec in conv.get("messages") or []:
+            if not isinstance(rec, dict):
+                continue
+            local = str(rec.get("_local_media") or "")
+            if local and os.path.isfile(local):
+                stats["reused"] += 1
+                continue
+            content = str(_first(rec, _K_TEXT) or "")
+            if _infer_type(rec, content, bool(_attachments(rec))) != "image":
+                continue
+            mid = str(rec.get("openMessageId") or "")
+            rid = _image_resource(rec, content)
+            if not cid or not mid or not rid:
+                continue
+            jobs.append((cid, rec, rid))
+    if not jobs:
+        stats["seconds"] = round(time.time() - t0, 1)
+        return stats
+    if len(jobs) > limit:
+        stats["skipped"] += len(jobs) - limit
+        jobs = jobs[:limit]
+    os.makedirs(out_dir, exist_ok=True)
+
+    def one(job: Tuple[str, Dict[str, Any], str]):
+        cid, rec, rid = job
+        if time.time() > deadline:
+            return "skipped", rec, ""
+        mid = str(rec.get("openMessageId") or "")
+        # 每条消息单独一个子目录：_download_media 靠「目录里新增了哪个文件」判断产物，
+        # 共享目录在并发下会互相抢到别人的图。
+        raw = _download_media(cid, mid, rid, os.path.join(out_dir, _safe(mid)[:16]),
+                              dws_bin, timeout=60)
+        if not raw:
+            return "failed", rec, ""
+        stem = _safe(str(rec.get("createTime") or mid))[:32]
+        target = os.path.join(out_dir, f"图片_{stem}_{_safe(mid)[-6:]}.jpg")
+        return "downloaded", rec, _shrink_image(raw, target, max_edge, quality)
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(jobs)))) as pool:
+        for state, rec, path in pool.map(one, jobs):
+            stats[state] = stats.get(state, 0) + 1
+            if path:
+                rec["_local_media"] = path
+    stats["seconds"] = round(time.time() - t0, 1)
+    return stats
 
 
 def _drive_download(node: str, out_path: str, dws_bin: str) -> Optional[str]:
@@ -246,13 +375,19 @@ def _coerce_message(rec: Dict[str, Any], seq: int, conv: Dict[str, Any],
     msg_id = str(rec.get("openMessageId") or "")
     conv_id = str(conv.get("openConversationId") or "")
 
-    media = ""
+    # 0) 直读链路已经用 dws 下载好的本地文件（fetch_images 写在消息上的 _local_media）。
+    #    直读时 download_media=False，不认这个字段的话就会退回 mediaId 占位文本。
+    media = str(rec.get("_local_media") or "")
+    if media and not os.path.isfile(media):
+        media = ""
+
     # 1) 附件里已落地的本地真实文件（exporter 产物）
-    for att in atts:
-        local = _find_local(att, attachments_dir)
-        if local:
-            media = local
-            break
+    if not media:
+        for att in atts:
+            local = _find_local(att, attachments_dir)
+            if local:
+                media = local
+                break
 
     # 2) 官方下载：文件走 drive，图片/视频/语音走 download-media
     if not media and atts and dws_bin:
@@ -288,15 +423,20 @@ def _coerce_message(rec: Dict[str, Any], seq: int, conv: Dict[str, Any],
     if m:
         amount = m.group(1)
 
-    return {
+    out = {
         "seq": seq,
         "sender": str(_first(rec, _K_SENDER) or "未知"),
+        "sender_id": str(_first(rec, _K_SENDER_ID) or ""),
         "time": _norm_time(_first(rec, _K_TIME)),
         "text": text,
         "type": mtype,
         "media": media,
         "amount": amount,
     }
+    flag = _first(rec, _K_SELF_FLAG)
+    if isinstance(flag, bool):
+        out["is_self"] = flag
+    return out
 
 
 def _iter_conversations(obj: Any) -> Iterable[Dict[str, Any]]:

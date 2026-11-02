@@ -83,7 +83,7 @@ export const AnalysisPayloadSchema = z.object({
 
 export const AnalysisResultSchema = AnalysisPayloadSchema.extend({
   generatedAt: z.string(),
-  analysisMode: z.enum(["mock", "model"]),
+  analysisMode: z.enum(["mock", "model", "rule"]),
 });
 
 export type Evidence = z.infer<typeof EvidenceSchema>;

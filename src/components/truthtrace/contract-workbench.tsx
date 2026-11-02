@@ -9,6 +9,7 @@ import type { EvidenceRef } from "@/lib/contracts";
 import { analyzeFiles } from "./api-client";
 import { analysisReport, materialKinds, uniqueRefs } from "./case-view";
 import type { CaseAnalysis } from "./api-client";
+import { EvidenceContent } from "./evidence-content";
 import avatar from "./assets/inspector-avatar.png";
 
 export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAnalysis; onHome: () => void; onUpdate: (value: CaseAnalysis) => void }) {
@@ -23,6 +24,11 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
   const [selected, setSelected] = useState<string | null>(null);
   const [focused, setFocused] = useState<string[]>([]);
   const [immersive, setImmersive] = useState(false);
+  // 导入提示（跳过的会话 / 被裁剪的证据）弹层关掉后才看得到，所以放在工作台里，允许手动关闭
+  const [noticeOpen, setNoticeOpen] = useState(true);
+  const notice = result.notice;
+  const hasNotice = Boolean(notice && (notice.skipped?.length || notice.truncated || notice.truncatedChars
+    || notice.droppedEvidence || notice.droppedImages || notice.note));
   const dialog = useRef<HTMLDialogElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const original = evidence.find(item => item.id === selected);
@@ -67,11 +73,24 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
     <header className="contract-topbar">
       <button className="contract-brand" onClick={onHome} aria-label="返回案件首页"><Image src={avatar} alt="咪探长" width={57} height={60} /><span>TruthTrace<small>证据调查工作台</small></span></button>
       <div><small>当前案件</small><h1>{result.caseName || analysis.caseTitle}</h1></div>
-      <span className={`contract-mode mode-${analysis.analysisMode}`}>{analysis.analysisMode === "mock" ? "模拟分析" : "模型分析"}</span>
+      <span className={`contract-mode mode-${analysis.analysisMode}`}>{{ mock: "模拟分析", rule: "规则分析", model: "模型分析" }[analysis.analysisMode]}</span>
       <input ref={upload} type="file" accept="image/*,.pdf,.txt,.md" multiple hidden onChange={event => { void supplement(Array.from(event.target.files || [])); event.target.value = ""; }} /><button className="contract-outline" disabled={busy} onClick={() => upload.current?.click()}><Plus size={14} />{busy ? "正在整理…" : "补充材料"}</button><button className="contract-outline" onClick={exportReport}><Download size={14} />导出报告</button>
       <button className="contract-outline" onClick={onHome}><FolderOpen size={14} /> 案件首页</button>
     </header>
     {busy && <p className="contract-feedback" role="status">正在整理补充材料，现有结果保留。</p>}{error && <p className="contract-feedback" role="alert">{error}</p>}
+    {hasNotice && noticeOpen && notice && (
+      <div className="contract-import-notice" role="status">
+        <strong>{notice.synced ? `已导入 ${notice.synced} 条证据` : "已导入证据"}</strong>
+        {notice.truncated && <span>· 超出单次取数上限，只保留了前一部分</span>}
+        {notice.droppedEvidence ? <span>· {notice.droppedEvidence} 条材料超出单次上限，未参与本次分析</span> : null}
+        {notice.droppedImages ? <span>· {notice.droppedImages} 张图片超出单次图片上限，未送入模型</span> : null}
+        {notice.truncatedChars ? <span>· {notice.truncatedChars} 条正文过长，模型只读到前一部分</span> : null}
+        {notice.skipped?.length ? <span>· {notice.skipped.length} 段被跳过（不在下面证据里）</span> : null}
+        {notice.skipped?.map(item => <small key={item.title}>{item.title}：{item.reason}</small>)}
+        {notice.note && <small>{notice.note}</small>}
+        <button type="button" onClick={() => setNoticeOpen(false)} aria-label="关闭导入提示"><X size={14} /></button>
+      </div>
+    )}
     <div className="contract-columns">
       <aside className="contract-catalog"><h2>证据档案 <small>{evidence.length}</small></h2>{evidence.map((item, index) => <button key={item.id} type="button" onClick={() => openSource(item.id)} className={focused.includes(item.id) ? "is-focused" : ""}><FileText size={17} /><span><small>材料 {String(index + 1).padStart(2, "0")}</small><strong>{item.name}</strong><em>{item.source || materialKinds[item.kind]}</em></span></button>)}</aside>
       <section className="contract-investigation">
@@ -82,8 +101,8 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
           <h3>下一步补证</h3>{(analysis.analysisMode === "model" ? analysis.evidenceGaps : []).map(item => <article key={item.id}><strong>{item.title}</strong><p>{item.reason}</p><p>{item.suggestedEvidence}</p><div>{sourceChips(item.evidenceRefs)}</div></article>)}{(analysis.evidenceGaps.length === 0 || analysis.analysisMode === "mock") && <p>{analysis.analysisMode === "mock" ? "模拟分析未生成补证建议。" : "当前结果没有补证建议。"}</p>}
         </div>}</div>
       </section>
-      <aside className="contract-findings"><h2><Flag size={18} />重点发现</h2><p className="contract-summary">{analysis.analysisMode === "mock" ? "仅完成材料登记，尚未连接分析模型。" : analysis.summary}</p>{analysis.contradictions.map((item, index) => <article key={item.id} className="contract-finding"><button className="contract-finding-title" onClick={() => focusSources(item.evidenceRefs)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong></button><p>{item.description}</p><small>待核实</small><button className="contract-compare" onClick={() => { setSelected(null); setComparison(item.id); }}>对照原文 →</button><div className="contract-sources">{sourceChips(item.evidenceRefs)}</div></article>)}{analysis.contradictions.length === 0 && analysis.analysisMode !== "mock" && <div className="contract-empty"><Sparkles size={23} /><p>当前结果未标出证据差异。</p></div>}<p className="contract-boundary">每项发现都保留来源，需结合原文人工核查。</p></aside>
+      <aside className="contract-findings"><h2><Flag size={18} />重点发现</h2><p className="contract-summary">{analysis.analysisMode === "mock" ? "仅完成材料登记，尚未连接分析模型。" : analysis.analysisMode === "rule" ? "已按发言人统计出人物与时间线，语义结论需接模型。" : analysis.summary}</p>{analysis.contradictions.map((item, index) => <article key={item.id} className="contract-finding"><button className="contract-finding-title" onClick={() => focusSources(item.evidenceRefs)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong></button><p>{item.description}</p><small>待核实</small><button className="contract-compare" onClick={() => { setSelected(null); setComparison(item.id); }}>对照原文 →</button><div className="contract-sources">{sourceChips(item.evidenceRefs)}</div></article>)}{analysis.contradictions.length === 0 && analysis.analysisMode !== "mock" && <div className="contract-empty"><Sparkles size={23} /><p>当前结果未标出证据差异。</p></div>}<p className="contract-boundary">每项发现都保留来源，需结合原文人工核查。</p></aside>
     </div>
-    <dialog ref={dialog} className="contract-source-dialog" onClose={() => { setSelected(null); setComparison(null); }} onClick={event => { if (event.target === event.currentTarget) { setSelected(null); setComparison(null); } }}><header><span><small>原始材料 · {original?.source || materialKinds[original?.kind || ""] || "证据对照"}</small><h2>{original?.name || finding?.title}</h2></span><button onClick={() => { setSelected(null); setComparison(null); }} aria-label="关闭原文"><X size={21} /></button></header>{finding ? <div className="contract-comparison">{uniqueRefs(finding.evidenceRefs).map((ref, index) => <article key={index}><h3>{evidence.find(e => e.id === ref.evidenceId)?.name || ref.evidenceId}</h3><blockquote>{ref.quote}</blockquote><small>{ref.locator}</small><button onClick={() => openSource(ref.evidenceId)}>查看完整材料 ↗</button></article>)}</div> : original?.kind === "image" ? <Image src={original.content} alt={original.name} width={1000} height={800} unoptimized /> : <pre>{original?.content}</pre>}{original && <details className="source-note"><summary>核查备注</summary><label><span className="agent-sr">核查备注</span><textarea value={notes[original.id] || ""} onChange={event => { const next = { ...notes, [original.id]: event.target.value }; setNotes(next); onUpdate({ ...result, reviewNotes: next }); }} placeholder="识别有误或尚待核实的内容…" maxLength={8000} /><small>保留本页，随报告导出；原始材料不变。</small></label></details>}</dialog>
+    <dialog ref={dialog} className="contract-source-dialog" onClose={() => { setSelected(null); setComparison(null); }} onClick={event => { if (event.target === event.currentTarget) { setSelected(null); setComparison(null); } }}><header><span><small>原始材料 · {original?.source || materialKinds[original?.kind || ""] || "证据对照"}</small><h2>{original?.name || finding?.title}</h2></span><button onClick={() => { setSelected(null); setComparison(null); }} aria-label="关闭原文"><X size={21} /></button></header>{finding ? <div className="contract-comparison">{uniqueRefs(finding.evidenceRefs).map((ref, index) => <article key={index}><h3>{evidence.find(e => e.id === ref.evidenceId)?.name || ref.evidenceId}</h3><blockquote>{ref.quote}</blockquote><small>{ref.locator}</small><button onClick={() => openSource(ref.evidenceId)}>查看完整材料 ↗</button></article>)}</div> : original?.kind === "image" ? <Image src={original.content} alt={original.name} width={1000} height={800} unoptimized /> : original ? <EvidenceContent item={original} all={evidence} onOpen={openSource} /> : null}{original && <details className="source-note"><summary>核查备注</summary><label><span className="agent-sr">核查备注</span><textarea value={notes[original.id] || ""} onChange={event => { const next = { ...notes, [original.id]: event.target.value }; setNotes(next); onUpdate({ ...result, reviewNotes: next }); }} placeholder="识别有误或尚待核实的内容…" maxLength={8000} /><small>保留本页，随报告导出；原始材料不变。</small></label></details>}</dialog>
   </div>;
 }
