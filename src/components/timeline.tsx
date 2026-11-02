@@ -3,6 +3,8 @@
 import { Clock3, Quote } from "lucide-react";
 import type { AnalysisResult, Evidence } from "@/lib/contracts";
 
+import { mergeTimeline } from "./truthtrace/case-view";
+
 type TimelineProps = {
   analysis: AnalysisResult;
   evidence: Evidence[];
@@ -10,11 +12,7 @@ type TimelineProps = {
 };
 
 export function Timeline({ analysis, evidence, onOpenEvidence }: TimelineProps) {
-  const events = [...analysis.events].sort((a, b) => {
-    if (!a.occurredAt) return 1;
-    if (!b.occurredAt) return -1;
-    return a.occurredAt.localeCompare(b.occurredAt);
-  });
+  const events = mergeTimeline(analysis.events);
 
   if (events.length === 0) return <div className="empty-state">暂无可展示的事件。</div>;
 
@@ -35,9 +33,9 @@ export function Timeline({ analysis, evidence, onOpenEvidence }: TimelineProps) 
                   {event.timePrecision === "exact" ? "明确时间" : event.timePrecision === "approximate" ? "约略时间" : "时间未知"}
                 </span>
               </div>
-              <p>{event.description}</p>
+              {event.description.trim() !== event.title.trim() && <p>{event.description}</p>}
               <div className="evidence-chips">
-                {event.evidenceRefs.map((ref, index) => {
+                {[...new Map(event.evidenceRefs.map(ref => [ref.evidenceId, ref])).values()].map((ref, index) => {
                   const source = evidence.find((item) => item.id === ref.evidenceId);
                   return (
                     <button key={`${ref.evidenceId}-${index}`} onClick={() => onOpenEvidence(ref.evidenceId)}>

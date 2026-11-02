@@ -26,32 +26,7 @@ export function normalizeState(value) {
   return state;
 }
 
-export function assessVerdict(state, choice) {
-  if (state.stage === 2) return { ok: false, message: '这条时间线索已经复核，可以查看调查笔记。' };
-  const needed = state.stage === 0 ? ['C-02','C-03'] : ['C-02','C-05'];
-  if (needed.some(id => !state.clues.includes(id)) || (state.stage === 1 && !state.extra)) {
-    return { ok: false, message: '先翻阅材料，把这两条关键线索摘录进线索簿。' };
-  }
-  if (choice !== 'supported') return { ok: false, message: choice === 'accuse'
-    ? '现有材料不能证明主观欺骗或直接认定诈骗。试着把结论限定在证据能支持的范围内。'
-    : '时间不同不等于材料作废。先核对款项、交易单号与时间含义。' };
-  return { ok: true, stage: state.stage + 1, message: state.stage === 0
-    ? '阶段判断已记录。下一步：补充完整回单，确认是不是同一笔押金。'
-    : '复核完成：已确认同一笔押金于周六到账。主体身份及延迟原因仍待调查。' };
-}
-
 export function buildReport(state) {
-  const clues = CLAIMS.filter(c => state.clues.includes(c.id));
-  return [
-    '# TruthTrace 调查笔记', '', '案件：校园兼职押金纠纷 / CASE 2026-001',
-    '说明：虚构演示案件。该笔记整理材料与疑点，不作法律定性。', '',
-    '## 已摘录线索', ...clues.map(c => `- [${c.sourceId} / ${c.id}] ${c.text}`), '',
-    '## 阶段判断', state.stage === 0 ? '尚未记录。' : state.stage === 1
-      ? 'E-02 与 E-03 的时间信息不同，尚需核实是否为同一笔交易。'
-      : 'E-05 与 E-03 的单号一致，证明本案押金于10月31日17:35到账，与10月30日晚“已全部退还”的说法不一致。此结论不代表已认定欺骗行为。', '',
-    '## 仍待核实', '- 星跃工作室的主体身份、与李某及王某账户的关系。',
-    '- 实际退款申请时间、到账延迟原因及其他报名者的经历。', '',
-    '## 我的观察', state.note || '暂未填写。', '',
-    '## 原始材料索引', ...EVIDENCE.filter(e => !e.extra || state.extra).map(e => `- ${e.id}：${e.title} / ${e.date}`)
-  ].join('\n');
+  const items=EVIDENCE.filter(e=>!e.extra||state.extra);
+  return ['# TruthTrace 调查报告','','校园兼职押金纠纷 · 虚构示例','','## 提取信息',...CLAIMS.filter(c=>items.some(e=>e.id===c.sourceId)).map(c=>`- [${c.sourceId}] ${c.text}`),'','## 待核查问题','- [E-02 / E-03] 退款说法与凭证日期不同，需核对是否为同一笔交易。',...(state.extra?['- [E-05] 示例回单与 E-03 单号一致，记载到账时间为 10月31日 17:35。延迟原因仍待核实。']:[]),'- [E-01 / E-04] 招募主体与收款账户的授权关系未证明。','','## 核查备注',state.note||'未填写。','','## 原始材料索引',...items.map(e=>`- ${e.id}：${e.title} / ${e.date}`)].join('\n');
 }

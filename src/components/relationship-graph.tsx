@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Background, Controls, MarkerType, ReactFlow } from "@xyflow/react";
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
 import type { AnalysisResult, Evidence } from "@/lib/contracts";
@@ -13,6 +13,9 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
   focusedEvidenceIds?: string[];
   onOpenEvidence?: (id: string) => void;
 }) {
+  const [personId, setPersonId] = useState<string | null>(null);
+  const selectedPerson = analysis.people.find(person => person.id === personId);
+  const canvas = useRef<HTMLDivElement>(null);
   const flow = useRef<ReactFlowInstance | null>(null);
   const nodes = useMemo<Node[]>(
     () =>
@@ -27,7 +30,7 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
               <div className="graph-node-content">
                 <span className="graph-node-role">{person.role}</span>
                 <strong>{person.name}</strong>
-                <span>{person.summary}</span>
+                <span>查看便签 ↗</span>
               </div>
             ),
           },
@@ -43,7 +46,7 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
       }), ...evidence.map((item, index) => ({
         id: `evidence:${item.id}`,
         position: { x: (index % 4) * 210, y: 430 + Math.floor(index / 4) * 150 },
-        data: { label: <button className="contract-graph-evidence" onClick={() => onOpenEvidence?.(item.id)}><small>原始材料 / {index + 1}</small><strong>{item.name}</strong><span>打开原文 ↗</span></button> },
+        data: { label: <button className="contract-graph-evidence nodrag" onClick={() => onOpenEvidence?.(item.id)}><small>原始材料 / {index + 1}</small><strong>{item.name}</strong><span>打开原文 ↗</span></button> },
         style: { width: 180, border: focusedEvidenceIds.includes(item.id) ? "3px solid #ffe0a0" : "1px solid #b78d53", borderRadius: 4, background: "#ecddbc", color: "#503820", boxShadow: focusedEvidenceIds.includes(item.id) ? "0 0 25px #ffcc7580" : "2px 7px 12px #35200f55", opacity: focusedEvidenceIds.length && !focusedEvidenceIds.includes(item.id) ? 0.35 : 1 },
       }))],
     [analysis.people, evidence, focusedEvidenceIds, onOpenEvidence],
@@ -75,16 +78,23 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
     return () => cancelAnimationFrame(frame);
   }, [focusedEvidenceIds, nodes]);
 
+  useEffect(() => {
+    const element = canvas.current; if (!element) return;
+    const observer = new ResizeObserver(() => { void flow.current?.fitView({ padding: 0.25, duration: 0, nodes: focusedEvidenceIds.length ? focusedEvidenceIds.map(id => ({ id: `evidence:${id}` })) : undefined }); });
+    observer.observe(element); return () => observer.disconnect();
+  }, [focusedEvidenceIds]);
+
   if (analysis.people.length === 0 && evidence.length === 0) {
     return <div className="empty-state">当前结果没有可绘制的人物关系。</div>;
   }
 
   return (
-    <div className="graph-canvas" aria-label="人物关系图">
-      <ReactFlow nodes={nodes} edges={edges} onInit={instance => { flow.current = instance; }} fitView minZoom={0.2} maxZoom={1.8} proOptions={{ hideAttribution: false }}>
+    <div ref={canvas} className="graph-canvas" aria-label="人物与材料关系图">
+      <ReactFlow ariaLabelConfig={{ "controls.ariaLabel": "画布控制", "controls.zoomIn.ariaLabel": "放大关系图", "controls.zoomOut.ariaLabel": "缩小关系图", "controls.fitView.ariaLabel": "适应画布" }} onNodeClick={(_, node) => { if (analysis.people.some(p => p.id === node.id)) setPersonId(node.id); }} onPaneClick={() => setPersonId(null)} nodes={nodes} edges={edges} onInit={instance => { flow.current = instance; }} fitView minZoom={0.2} maxZoom={1.8} proOptions={{ hideAttribution: false }}>
         <Background color="#a77f47" gap={27} size={1} />
         <Controls showInteractive={false} />
       </ReactFlow>
+      {selectedPerson && <aside className="graph-person-peek" aria-label="主体便签"><button className="peek-close" onClick={() => setPersonId(null)} aria-label="关闭便签">×</button><small>人物 / 主体 · {selectedPerson.role}</small><h3>{selectedPerson.name}</h3><p>{selectedPerson.summary}</p><details><summary>展开档案与来源</summary><p>别名：{selectedPerson.aliases.join("、") || "未记录"}</p>{selectedPerson.evidenceRefs.map((ref, i) => <button key={i} onClick={() => onOpenEvidence?.(ref.evidenceId)}>{evidence.find(e => e.id === ref.evidenceId)?.name || ref.evidenceId} ↗</button>)}</details></aside>}
     </div>
   );
 }
