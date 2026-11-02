@@ -235,7 +235,7 @@ function renderIntro() {
 }
 
 function renderUpload() {
-  setDialog('把新的材料放进档案','LOCAL EVIDENCE / 本地材料',`<div class="upload-room"><label class="upload-dropzone" id="uploadDropzone">${icon('folder')}<strong>把截图、PDF 或文本拖到这里</strong><span>也可以点击选择文件</span><input id="uploadFiles" type="file" accept="image/*,.pdf,.txt,.md" multiple/></label><div class="upload-queue">${uploadQueue.map(f=>`<div>${icon('file')}<span>${esc(f.name)}</span><small>${(f.size/1024).toFixed(0)} KB</small></div>`).join('')||'<p>等待加入材料…</p>'}</div><p class="small-explanation">文件仅在当前页面本地预览，不会发送到服务器。当前版本不自动解析、联网分析或生成新结论；刷新页面后需重新选择文件。</p><button class="room-button primary" type="button" data-action="import-files" ${uploadQueue.length?'':'disabled'}>加入证据档案 →</button></div>`);
+  setDialog('把新的材料放进档案','LOCAL EVIDENCE / 本地材料',`<div class="upload-room"><label class="upload-dropzone" id="uploadDropzone">${icon('folder')}<strong>把截图、PDF、文本或聊天记录 JSON 拖到这里</strong><span>也可以点击选择文件</span><input id="uploadFiles" type="file" accept="image/*,.pdf,.txt,.md,.json" multiple/></label><div class="upload-queue">${uploadQueue.map(f=>`<div>${icon('file')}<span>${esc(f.name)}</span><small>${(f.size/1024).toFixed(0)} KB</small></div>`).join('')||'<p>等待加入材料…</p>'}</div><p class="small-explanation">文件仅在当前页面本地预览，不会发送到服务器。当前版本不自动解析、联网分析或生成新结论；刷新页面后需重新选择文件。</p><button class="room-button primary" type="button" data-action="import-files" ${uploadQueue.length?'':'disabled'}>加入证据档案 →</button></div>`);
   $('#uploadFiles').addEventListener('change',e=>queueFiles(e.target.files));
   const zone=$('#uploadDropzone');
   zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag-over')});
@@ -488,7 +488,7 @@ $('.wall-header-actions').insertBefore(notebookButton,$('#fullscreenButton'));
 const presentationLabel=document.createElement('span');presentationLabel.className='center-presentation-label';presentationLabel.textContent='全屏展示';$('#fullscreenButton').append(presentationLabel);
 renderMain();fitBoard(true);
 const initialView=location.hash.slice(1);
-const entry=initEntryFlow({root,signal,asset,onContext:bridge.onContext,cases:bridge.cases,onOpenCase:bridge.onOpenCase,onAnalyzeFiles:bridge.analyzeFiles,onAnalysisReady:bridge.onAnalysisReady,onDemoReady:(caseName,fresh)=>{
+const entry=initEntryFlow({root,signal,asset,onContext:bridge.onContext,cases:bridge.cases,onOpenCase:bridge.onOpenCase,onAnalyzeFiles:bridge.analyzeFiles,onAnalysisReady:bridge.onAnalysisReady,onOpenChannel:bridge.onOpenChannel,onDemoReady:(caseName,fresh)=>{
   publishDemoContext(caseName);
   if(fresh){
     state=createState();uploadedEvidence.forEach(e=>URL.revokeObjectURL(e.url));uploadedEvidence=[];save();

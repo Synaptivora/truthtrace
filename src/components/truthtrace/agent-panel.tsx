@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { MessageCircle, X, Settings, Send, Square, Trash2 } from "lucide-react";
+import { MessageCircle, X, Settings, Send, Square, Trash2, Cable } from "lucide-react";
 import type { AnalysisResult, Evidence } from "@/lib/contracts";
 import { providers, type Connection, type Protocol } from "@/lib/agent/providers";
 import type { AgentEvent, AgentReply } from "@/lib/agent/contracts";
+import { McpGuide } from "./mcp-guide";
 
 export type AgentContext = { evidence: Evidence[]; analysis?: AnalysisResult; caseName?: string; caseId?: string };
 type Turn = { role: "user" | "assistant"; content: string; reply?: AgentReply };
@@ -15,6 +16,7 @@ const initialConnection: Connection = { provider: "openai", protocol: "openai", 
 export function AgentPanel({ context }: { context: AgentContext | null }) {
   const [open, setOpen] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [mcp, setMcp] = useState(false);
   const [mode, setMode] = useState<Mode>("server");
   const [connection, setConnection] = useState<Connection>(initialConnection);
   const [threads, setThreads] = useState<Record<string, Turn[]>>({});
@@ -53,8 +55,9 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
   return <>
     <button ref={launcher} className="agent-launcher" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-controls="agent-panel"><MessageCircle size={19} />和咪探长聊聊</button>
     {open && <aside id="agent-panel" className="agent-panel" ref={panel} tabIndex={-1} aria-label="咪探长对话" onKeyDown={e => { if (e.key === "Escape") close(); }}>
-      <header className="agent-header"><div><strong>Synapse · 咪探长</strong><small>{context?.caseName || "全局助手 · 未选择案件"}</small></div><button onClick={() => setSettings(v => !v)} aria-label="连接设置" aria-expanded={settings}><Settings size={18} /></button><button onClick={close} aria-label="关闭助手"><X size={20} /></button></header>
-      {settings && <section className="agent-settings" aria-label="模型连接设置">
+      <header className="agent-header"><div><strong>Synapse · 咪探长</strong><small>{context?.caseName || "全局助手 · 未选择案件"}</small></div><button className="agent-mcp-trigger" onClick={() => { setMcp(v => !v); setSettings(false); }} aria-label="数据源 MCP 配置" aria-expanded={mcp}><Cable size={18} /></button><button onClick={() => { setSettings(v => !v); setMcp(false); }} aria-label="模型设置" aria-expanded={settings}><Settings size={18} /></button><button onClick={close} aria-label="关闭助手"><X size={20} /></button></header>
+      {mcp && <McpGuide onClose={() => setMcp(false)} />}
+      {settings && !mcp && <section className="agent-settings" aria-label="模型连接设置">
         <label>连接方式<select aria-label="连接方式" value={mode} onChange={e => { testRequest.current?.abort(); setTesting(false); setMode(e.target.value as Mode); setProbe(""); }}><option value="server">服务端配置</option><option value="custom">选择供应商</option><option value="demo">本地演示 · 不调用模型</option></select></label>
         {mode === "server" && <p>{server}</p>}
         {mode === "custom" && <>

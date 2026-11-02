@@ -8,6 +8,7 @@
 .contract-topbar h1 { font:500 23px var(--serif); margin:8px 0; overflow-wrap:anywhere; }
 .contract-mode { border:1px solid #ba8c4d88; padding:6px 10px; border-radius:20px; font-size:10px; white-space:nowrap; color:#e4ba7d; }
 .contract-mode.mode-model { color:#b8ca9d; border-color:#82976888; }
+.contract-mode.mode-rule { color:#e0c48f; border-color:#c9a22788; }
 .contract-outline { display:flex; align-items:center; gap:6px; background:#71522c44; border:1px solid #b78b4a66; color:#d8b782; padding:9px 12px; border-radius:6px; font-size:11px; }
 .contract-stats { margin:21px 0; }
 .contract-columns { display:grid; grid-template-columns:220px minmax(0,1fr) 300px; gap:15px; height:calc(100svh - 225px); min-height:570px; }
@@ -36,7 +37,7 @@
 .contract-shell .graph-node-content { text-align:left; padding:7px; display:flex; flex-direction:column; gap:7px; }
 .contract-shell .graph-node-role { font-size:9px; color:#a07943; }
 .contract-shell .graph-node-content>strong { font-size:16px; }
-.contract-shell .graph-node-content>span:last-child { font-size:10px; line-height:1.8; color:#8a683d; }
+.contract-shell .graph-node-content>span:last-child { font-size:10px; line-height:1.8; color:#8a683d; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
 .contract-focus-bar { display:flex; align-items:center; justify-content:space-between; padding:9px 13px; font-size:10px; background:#6d4d2b; color:#edd09e; }
 .contract-focus-bar button { background:transparent; color:#e0ba7c; padding:3px; font-size:10px; }
 .contract-assistant { display:flex; align-items:center; gap:10px; padding:8px 12px; border-top:1px solid #b0864566; background:#3b2b1e; }
@@ -85,3 +86,21 @@
 @media(max-width:550px) { .contract-columns { grid-template-columns:1fr; }.contract-catalog { display:flex; overflow:auto; gap:8px; padding:11px; }.contract-catalog h2 { display:none; }.contract-catalog>button { min-width:170px; margin:0; }.contract-findings { grid-column:auto; }.contract-brand>span { display:none; }.contract-topbar h1 { font-size:17px; }.contract-stats { grid-template-columns:1fr 1fr; }.contract-stats .stat { padding:10px; }.contract-investigation { min-height:560px; }.contract-source-dialog>header { padding:18px; }.contract-source-dialog>pre { padding:20px; font-size:12px; } }
 
 .resume-analysis { position:fixed; bottom:24px; right:24px; z-index:100; max-width:calc(100vw - 48px); padding:14px 22px; border:1px solid #b98f54; border-radius:8px; background:#ead9b9; color:#503820; box-shadow:0 4px 20px #0003; cursor:pointer; }
+
+/* 导入提示横幅：弹层关掉之后唯一能看到「哪些群被跳过」的地方 */
+.contract-import-notice { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; margin:10px 0 0; padding:10px 14px; border-radius:8px; font-size:12px; line-height:1.7; background:#2f2a20; border-left:3px solid #c9a227; color:#e4cfaa; }
+.contract-import-notice strong { font-weight:600; }
+.contract-import-notice span { color:#c0ad8a; }
+.contract-import-notice small { flex-basis:100%; color:#a89a80; font-size:11px; }
+.contract-import-notice button { margin-left:auto; background:none; border:0; color:#a89a80; cursor:pointer; padding:2px; display:flex; }
+.contract-import-notice button:hover { color:#e4cfaa; }
+
+/* 证据正文（替代原来的 <pre>）：聊天标记变 chip，正文里的链接可点 */
+.contract-source-dialog > .evidence-content { padding:24px 30px; margin:0; max-height:70svh; overflow:auto; font:13px/1.95 var(--sans); color:#5e4026; }
+.evidence-content p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.evidence-content.is-chat p { padding-left:0; }
+.evidence-content a { color:#8a5d2f; text-decoration:underline; text-underline-offset:2px; }
+.evidence-media-chip { display:inline-flex; align-items:center; gap:3px; margin:0 2px; padding:0 7px; border:1px solid #b28b56aa; border-radius:10px; background:#ad88592a; color:#7d5528; font-size:11.5px; line-height:1.7; cursor:pointer; }
+.evidence-media-chip:hover:not(:disabled) { background:#ad88594d; }
+.evidence-media-chip:disabled { opacity:.45; cursor:not-allowed; }
+@media(max-width:550px) { .contract-source-dialog > .evidence-content { padding:18px; font-size:12px; } }

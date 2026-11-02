@@ -13,6 +13,10 @@ A 环节 · 证据解析服务 (server.py)
     GET  /source/status?source=钉钉 渠道授权状态
     POST /source/connect           触发/探测渠道授权（扫码类授权仍需人做）
     POST /source/sync              按调查目标做 AI 精准取数，返回 { evidences: [...] }
+    POST /source/conversations     渠道导出文件 → 会话列表（供 C 端逐会话多选）
+    POST /source/preview           会话 + 时间范围 → 消息预览（不改写记录，仅供人看）
+    POST /source/extract           用户选定的会话/时间范围 → { evidences: [...] }（不猜，原样取）
+    POST /source/live              免导出直读（钉钉）：按时间范围调 dws 拉快照 → 会话列表
                      —— 全部纯新增，不改上面三个既有端点，B/C 不调用即为死代码
 
 实现状态：
@@ -93,6 +97,10 @@ UPLOAD_DIR = os.environ.get(
     "UPLOAD_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "_uploads"))
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 
+# 一次 /source/extract 最多返回多少条证据（与 B 的 /api/analyze 同量级）。
+# 只是病态请求的护栏：真正的成本控制在 B 侧按类型分档（图片单独限额、文本受字符预算保护）。
+MAX_EXTRACT_EVIDENCE = int(os.environ.get("MAX_EXTRACT_EVIDENCE", "200"))
+
 
 # ---------------------------------------------------------------------------
 # 1) 解析 multipart/form-data 的 file 字段（标准库，兼容 py3.13+）
@@ -110,6 +118,33 @@ def parse_file_field(body: bytes, content_type: str):
         if part.get_filename():
             return part.get_filename(), part.get_payload(decode=True), part.get_content_type()
     return None, None, None
+
+
+def parse_multipart_fields(body: bytes, content_type: str):
+    """返回 (fields: dict[str,str], upload: (filename, data, ctype) | None)。
+
+    /source/conversations 既要收渠道导出文件，也要收 source 这类文本字段；
+    parse_file_field 只看文件，会丢字段，所以单独走这个。
+    """
+    raw = b"Content-Type: " + content_type.encode("utf-8", "ignore") + b"\r\n\r\n" + body
+    msg = BytesParser(policy=default).parsebytes(raw)
+    fields: dict[str, str] = {}
+    upload = None
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        cd = part.get("Content-Disposition", "") or ""
+        name = re.search(r'name="([^"]*)"', cd)
+        values = part.get_payload(decode=True)
+        filename = part.get_filename()
+        if filename:
+            upload = (filename, values, part.get_content_type())
+        elif name and values is not None:
+            try:
+                fields[name.group(1)] = values.decode("utf-8")
+            except UnicodeDecodeError:
+                fields[name.group(1)] = ""
+    return fields, upload
 
 
 # ---------------------------------------------------------------------------
@@ -791,6 +826,27 @@ def _coerce_record(rec: dict) -> dict | None:
     }
 
 
+_MEDIA_LABEL = {"image": "图片", "file": "文件", "voice": "语音"}
+
+
+def _media_name(media: str, kind: str, time: str) -> str:
+    """媒体的展示名，与 ai_ingest/evidence.py 的 _media_display_name 保持一致。
+
+    为什么要 basename（且要先统一分隔符）：Windows 上媒体是 `C:\\...\\转账截图.png`，
+    直接 rsplit("/") 切不动，证据标题会变成一整条绝对路径——既难看又暴露本机目录。
+    dws 这类接口给的是 mediaId 而不是文件名，所以只有「看起来像文件」才用 basename。
+    """
+    label = _MEDIA_LABEL.get(kind, "媒体")
+    if media.startswith("data:"):
+        return f"{label}(内嵌)"
+    base = os.path.basename(media.replace("\\", "/"))
+    looks_like_file = bool(base) and len(base) <= 80 and "?" not in base and "=" not in base \
+        and os.path.splitext(base)[1]
+    if looks_like_file:
+        return base
+    return f"{label} · {time}" if time else label
+
+
 def build_chat_content(records) -> tuple[str, list]:
     """把聊天记录（list[dict]）拼成对话文本，对媒体/特殊类型插入【内联标记】。
     返回 (chat_text, media_list)；media_list 为需独立成证的媒体项
@@ -817,7 +873,7 @@ def build_chat_content(records) -> tuple[str, list]:
                 # 没有真实附件（未解密 / 纯标记）：只留文本，不产出「缺失」占位证据
                 lines.append(f"{ts}{sender}: {text or '[图片]'}")
                 continue
-            name = "图片(内嵌)" if media.startswith("data:") else (media.rsplit("/", 1)[-1] or "图片")
+            name = _media_name(media, "image", time)
             lines.append(f"{ts}{sender}: [图片@{time}: {name} 见独立证据]")
             media_list.append({"name": name, "media_ref": media, "kind_hint": "image", "time": time})
         elif t == "file":
@@ -825,13 +881,13 @@ def build_chat_content(records) -> tuple[str, list]:
                 # 小程序卡片/链接式文件消息只有标题文本，没有可读附件
                 lines.append(f"{ts}{sender}: {text or '[文件]'}")
                 continue
-            name = "文件(内嵌)" if media.startswith("data:") else (media.rsplit("/", 1)[-1] or "文件")
+            name = _media_name(media, "file", time)
             lines.append(f"{ts}{sender}: [文件:{name}@{time} 见独立证据]")
             media_list.append({"name": name, "media_ref": media, "kind_hint": "file", "time": time})
         elif t == "voice":
             if media:
                 # 语音有附件路径时也独立成证，便于后续按需转写（SILK→WAV）
-                vname = "语音(内嵌)" if media.startswith("data:") else (media.rsplit("/", 1)[-1] or "语音")
+                vname = _media_name(media, "voice", time)
                 lines.append(f"{ts}{sender}: [语音@{time}: {vname} 见独立证据]")
                 media_list.append({"name": vname, "media_ref": media, "kind_hint": "voice", "time": time})
             else:
@@ -1125,7 +1181,15 @@ def oversize_evidence(filename, mime, data: bytes, origin: str | None = None,
     size_mb = len(data or b"") / 1024 / 1024
     stored = save_upload(data or b"", name)
     base = (PUBLIC_BASE_URL or base_url or "").rstrip("/")
-    link = f"{base}/files/{stored}" if (stored and base) else ""
+    # 配了 PUBLIC_BASE_URL 才给绝对地址（直连 A 的场景）；否则给相对路径，
+    # 由前端改写成同源 /api/files/<id>。经 B 转发时 Host 是 127.0.0.1:8000，
+    # 把这种地址塞进正文，浏览器跨机打开就是死链。
+    if stored and PUBLIC_BASE_URL:
+        link = f"{base}/files/{stored}"
+    elif stored:
+        link = f"/files/{stored}"
+    else:
+        link = ""
 
     lines = [
         f"[附件过大，未解析] 文件：{name}（{size_mb:.1f} MB）",
@@ -1296,8 +1360,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"service": "TruthTrace A 解析服务",
                              "endpoints": ["POST /parse", "POST /parse_chat",
                                            "GET /files/<id>", "GET /health",
-                                           "GET /source/list", "GET /source/status",
-                                           "POST /source/connect", "POST /source/sync"]})
+                             "GET /source/list", "GET /source/status",
+                             "POST /source/connect", "POST /source/sync",
+                             "POST /source/conversations", "POST /source/preview",
+                             "POST /source/extract", "POST /source/live",
+                             "POST /source/sessions",
+                             "POST /source/conversation/refresh"]})
 
     # ---------------------------------------------------------------- /source
     def _source_unavailable(self):
@@ -1411,21 +1479,36 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # ---- /source/connect|sync（方案 A：数据源连接与 AI 精准取数）----
+        # 以及 v0.8 的「人工挑选导入」三连：conversations / preview / extract
         # 排在 /parse 兜底之前，理由同 do_GET：兜底不是 404，被它接住就是静默错误。
-        if path in ("/source/connect", "/source/sync"):
+        if path in ("/source/connect", "/source/sync", "/source/conversations",
+                    "/source/preview", "/source/extract", "/source/live",
+                    "/source/sessions", "/source/conversation/refresh"):
             if not _SOURCE_SVC:
                 return self._source_unavailable()
             body = self._read_body()
             if body is None:
                 return
-            try:
-                payload = json.loads(body.decode("utf-8")) if body.strip() else {}
-            except json.JSONDecodeError:
-                self._send_json({"error": "请求体必须是 JSON"}, 400)
-                return
+            ctype = self.headers.get("Content-Type", "") or ""
+            upload = None
+            if path == "/source/conversations" and ctype.startswith("multipart/form-data"):
+                # 渠道导出文件可能几十 MB，走 multipart 直接上传，不让用户去服务器上找路径
+                try:
+                    fields, upload = parse_multipart_fields(body, ctype)
+                except Exception as e:  # noqa: BLE001
+                    self._send_json({"error": f"解析上传失败: {e}"}, 400)
+                    return
+                payload = dict(fields)
+            else:
+                try:
+                    payload = json.loads(body.decode("utf-8")) if body.strip() else {}
+                except json.JSONDecodeError:
+                    self._send_json({"error": "请求体必须是 JSON"}, 400)
+                    return
+
             if path == "/source/connect":
                 obj, code = _SOURCE_SVC.connect(payload.get("source"))
-            else:
+            elif path == "/source/sync":
                 try:
                     mw = int(payload.get("max_windows", 8))
                 except (TypeError, ValueError):
@@ -1436,6 +1519,120 @@ class Handler(BaseHTTPRequestHandler):
                     source_data=payload.get("source_data"),
                     mode=payload.get("mode", "auto"),
                     max_windows=mw,
+                )
+            elif path == "/source/conversations":
+                handle = None
+                if upload and upload[1]:
+                    handle = _SOURCE_SVC.save_handle(upload[1], upload[0])
+                obj, code = _SOURCE_SVC.conversations(
+                    payload.get("source"),
+                    handle=payload.get("handle") or handle,
+                    source_data=payload.get("source_data"),
+                )
+            elif path == "/source/live":
+                try:
+                    lim = int(payload.get("limit", 100))
+                except (TypeError, ValueError):
+                    lim = 100
+                try:
+                    # 钉钉 list-all 每页最多约 100 条、从最新往前翻；页数给足才能覆盖
+                    # 「近 30 天」这类范围，真正的边界由 hasMore 与时间预算决定。
+                    pg = int(payload.get("max_pages", 60))
+                except (TypeError, ValueError):
+                    pg = 60
+                try:
+                    budget = float(payload.get("budget", 120))
+                except (TypeError, ValueError):
+                    budget = 120.0
+                obj, code = _SOURCE_SVC.live(
+                    payload.get("source"),
+                    time_start=payload.get("time_start"),
+                    time_end=payload.get("time_end"),
+                    limit=lim,
+                    max_pages=pg,
+                    budget=budget,
+                    conversations=payload.get("conversations"),
+                )
+            elif path == "/source/sessions":
+                # 只列会话、不读消息：用户先勾要读哪几段，再真正读取
+                try:
+                    slimit = int(payload.get("limit", 100))
+                except (TypeError, ValueError):
+                    slimit = 100
+                try:
+                    spg = int(payload.get("max_pages", 60))
+                except (TypeError, ValueError):
+                    spg = 60
+                try:
+                    sbudget = float(payload.get("budget", 120))
+                except (TypeError, ValueError):
+                    sbudget = 120.0
+                obj, code = _SOURCE_SVC.sessions(
+                    payload.get("source"),
+                    time_start=payload.get("time_start"),
+                    time_end=payload.get("time_end"),
+                    limit=slimit,
+                    max_pages=spg,
+                    budget=sbudget,
+                )
+            elif path == "/source/conversation/refresh":
+                # 单会话重读：list-all 会按会话截断，用户怀疑「某段只有几天」时，
+                # 只有按群精确翻页才能把这段读全，也只改动这一段。
+                try:
+                    lim = int(payload.get("limit", 100))
+                except (TypeError, ValueError):
+                    lim = 100
+                try:
+                    budget = float(payload.get("budget", 90))
+                except (TypeError, ValueError):
+                    budget = 90.0
+                obj, code = _SOURCE_SVC.refresh_conversation(
+                    payload.get("source"),
+                    handle=payload.get("handle"),
+                    conversation_id=payload.get("conversation_id"),
+                    title=payload.get("title"),
+                    time_start=payload.get("time_start"),
+                    time_end=payload.get("time_end"),
+                    limit=max(1, min(lim, 100)),
+                    budget=budget,
+                )
+            elif path == "/source/preview":
+                try:
+                    limit = int(payload.get("limit", 160))
+                except (TypeError, ValueError):
+                    limit = 160
+                obj, code = _SOURCE_SVC.preview(
+                    payload.get("source"),
+                    handle=payload.get("handle"),
+                    source_data=payload.get("source_data"),
+                    conversation_ids=payload.get("conversation_ids"),
+                    time_start=payload.get("time_start"),
+                    time_end=payload.get("time_end"),
+                    limit=max(1, min(limit, 500)),
+                )
+            else:  # /source/extract
+                try:
+                    cap = int(payload.get("max_evidence", 60))
+                except (TypeError, ValueError):
+                    cap = 60
+                try:
+                    # 不传就用 MAX_CONTENT_CHARS（与 /parse 同一套预算）
+                    extract_chars = int(payload["max_chars"]) if payload.get("max_chars") else None
+                except (TypeError, ValueError):
+                    extract_chars = None
+                obj, code = _SOURCE_SVC.extract(
+                    payload.get("source"),
+                    handle=payload.get("handle"),
+                    source_data=payload.get("source_data"),
+                    conversation_ids=payload.get("conversation_ids"),
+                    time_start=payload.get("time_start"),
+                    time_end=payload.get("time_end"),
+                    # 上限只挡病态请求。以前夹到 60：一段聊天带十几张图时，图会把配额吃光，
+                    # 真正的聊天反而被截掉。现在与 B 的 /api/analyze 同量级，
+                    # 图片的成本由 B 侧按「张数 + 字节」单独管。
+                    max_evidence=max(1, min(cap, MAX_EXTRACT_EVIDENCE)),
+                    exclude=payload.get("exclude") or {},
+                    max_chars=extract_chars,
                 )
             self._send_json(obj, code)
             return
