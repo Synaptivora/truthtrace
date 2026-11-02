@@ -23,6 +23,7 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [server, setServer] = useState("正在检查服务端配置");
   const [probe, setProbe] = useState("");
+  const [connectionRole, setConnectionRole] = useState("shared");
   const [testing, setTesting] = useState(false);
   const testRequest = useRef<AbortController | null>(null);
   const panel = useRef<HTMLElement>(null);
@@ -52,7 +53,13 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
     } catch { if (!controller.signal.aborted) setProbe("连接失败，请检查网络和配置。"); }
     finally { if (!controller.signal.aborted) setTesting(false); }
   }
+  async function saveShared() {
+    setTesting(true); setProbe("正在验证文本和工具能力并加密保存…");
+    try { const r = await fetch("/api/settings/connection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection, role: connectionRole }) }); const data = await r.json(); setProbe(data.error || data.message); if (r.ok) { setMode("server"); setServer(`${connection.provider} · ${connection.model}`); } }
+    catch { setProbe("保存失败，请检查本地服务。"); } finally { setTesting(false); }
+  }
   return <>
+    <button style={{position:"fixed",right:24,bottom:82,zIndex:60,padding:"8px 16px",background:"#f8efd9",color:"#243c32",borderRadius:8}} onClick={() => { setOpen(true); setSettings(true); setMcp(false); }}>设置</button>
     <button ref={launcher} className="agent-launcher" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-controls="agent-panel"><MessageCircle size={19} />和咪探长聊聊</button>
     {open && <aside id="agent-panel" className="agent-panel" ref={panel} tabIndex={-1} aria-label="咪探长对话" onKeyDown={e => { if (e.key === "Escape") close(); }}>
       <header className="agent-header"><div><strong>Synapse · 咪探长</strong><small>{context?.caseName || "全局助手 · 未选择案件"}</small></div><button className="agent-mcp-trigger" onClick={() => { setMcp(v => !v); setSettings(false); }} aria-label="聊天来源连接" aria-expanded={mcp}><Cable size={18} /></button><button onClick={() => { setSettings(v => !v); setMcp(false); }} aria-label="模型设置" aria-expanded={settings}><Settings size={18} /></button><button onClick={close} aria-label="关闭助手"><X size={20} /></button></header>
@@ -70,6 +77,7 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
           <p>聚合平台不同模型可能使用不同协议；地域或套餐地址可修改。不支持工具的模型可关闭工具调用。密钥不会写入浏览器存储。</p>
         </>}
         {mode !== "demo" && <button className="agent-test" disabled={testing} onClick={() => void test()}>{testing ? "测试中…" : "测试连接（一次模型调用）"}</button>}
+        {mode === "custom" && <><label>保存用途<select value={connectionRole} onChange={e=>setConnectionRole(e.target.value)}><option value="shared">默认共享</option><option value="chat">仅对话</option><option value="analysis">仅材料分析</option><option value="investigation">仅自主调查</option></select></label><button disabled={testing} onClick={() => void saveShared()}>测试并加密保存连接</button></>}
         {probe && <p role="status">{probe}</p>}
       </section>}
       <ChatSession key={`${threadId}:${mode}:${connection.provider}:${connection.protocol}:${connection.model}:${connection.baseUrl}:${connection.tools}`} context={context} mode={mode} connection={connection} initialDraft={drafts[threadId] || ""} onDraft={draft => setDrafts(previous => ({ ...previous, [threadId]: draft }))} initialTurns={threads[threadId] || []} onTurns={turns => setThreads(previous => ({ ...previous, [threadId]: turns }))} />

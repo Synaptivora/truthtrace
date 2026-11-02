@@ -113,12 +113,11 @@ export async function createModelAnalysis(evidence: Evidence[]): Promise<Analyze
 
   let used = 0;
   let truncated = 0;
-  // 被字符预算截断的证据，模型可能引用到被裁掉的部分；对它们放宽「引文必须逐字命中」，
-  // 否则证据一多就大面积 502（这条规则只对模型生效，rule/mock 不受影响）。
-  const loose = new Set<string>();
-
+  // Truncation never relaxes quote matching.
+  const visible: Evidence[] = [];
   for (const item of selected) {
     if (item.kind === "image") {
+      visible.push(item);
       content.push({ type: "text", text: `evidenceId=${item.id}；文件名=${item.name}；图像如下：` });
       content.push({ type: "image_url", image_url: { url: item.content, detail: "high" } });
       continue;
@@ -126,6 +125,7 @@ export async function createModelAnalysis(evidence: Evidence[]): Promise<Analyze
     const room = Math.max(0, budget.totalChars - used);
     if (item.content.length > room) {
       const kept = item.content.slice(0, room);
+      if (kept) visible.push({ ...item, content: kept });
       content.push({
         type: "text",
         text: `evidenceId=${item.id}\n文件名=${item.name}\n来源=${item.source ?? "用户上传"}\n原文：\n${kept}`
@@ -133,9 +133,10 @@ export async function createModelAnalysis(evidence: Evidence[]): Promise<Analyze
       });
       used = budget.totalChars;
       truncated += 1;
-      loose.add(item.id);
+
       continue;
     }
+    visible.push(item);
     used += item.content.length;
     content.push({
       type: "text",
@@ -188,7 +189,7 @@ export async function createModelAnalysis(evidence: Evidence[]): Promise<Analyze
   }
 
   return {
-    analysis: validateAnalysis(payload, selected, "model", { looseQuoteIds: loose }),
+    analysis: validateAnalysis(payload, visible, "model"),
     meta: { truncated, ...meta },
   };
 }

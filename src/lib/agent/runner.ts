@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentRequest, AgentReply, Citation } from "./contracts";
-import { resolveConnection } from "./providers";
+import { effectiveConnection as resolveConnection } from "../investigator/connections";
 import { modelStep, type Message, type Tool } from "./transport";
 
 export const agentTools: Tool[] = [

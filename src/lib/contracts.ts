@@ -7,6 +7,8 @@ export const EvidenceSchema = z.object({
   mimeType: z.string().min(1),
   content: z.string().min(1),
   source: z.string().optional(),
+  originalHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  parserVersion: z.string().optional(),
 });
 
 export const EvidenceRefSchema = z.object({

@@ -1,3 +1,5 @@
+import { savedConnection } from "../investigator/connections";
+import { analyzeWithConnection } from "./shared-model";
 import type { Evidence } from "../contracts";
 import { createMockAnalysis } from "./mock";
 import { createModelAnalysis, type AnalyzeOutcome } from "./openai-compatible";
@@ -11,6 +13,8 @@ function localMeta(): AnalyzeOutcome["meta"] {
 }
 
 export async function analyzeEvidence(evidence: Evidence[]): Promise<AnalyzeOutcome> {
+  const shared = savedConnection("analysis") ?? savedConnection();
+  if (shared) return analyzeWithConnection(evidence, shared);
   const provider = (process.env.AI_PROVIDER ?? "auto").toLowerCase();
 
   // auto：有密钥就走真实模型，没有就走本地规则——避免「配了 key 却忘了改 provider」
