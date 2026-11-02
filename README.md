@@ -1,17 +1,5 @@
-# TruthTrace · AI 现实档案调查局
-
+# TruthTrace
 上传聊天记录、截图和文件，AI 识别人物、还原事件、追踪承诺，并标出证据之间值得核查的差异，且每一条结论都可点回原始证据。
-
-赛题四：网络安全与反诈。主体开发使用 WorkBuddy。
-
-## 三人解耦边界
-
-| 成员 | 模块 | 接入点 |
-| --- | --- | --- |
-| B（骨架/编排） | API、模型提供器、专用 Prompt、Zod 数据契约 | `src/app/api/*`、`src/lib/ai/*`、`src/lib/contracts.ts` |
-| A（数据接入） | 文件/OCR/MCP 解析 | `src/lib/ingestion/parser.ts` 通过 `INGESTION_SERVICE_URL` 外接 |
-| C（前端展示） | 侦探工作台、关系图、时间线、交互 | `src/components/*`、`src/app/globals.css` |
-
 ## 运行
 
 ```bash
