@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Image from "next/image";
 import type { Evidence } from "@/lib/contracts";
 
 /**
@@ -76,18 +77,33 @@ function renderChatLine(line: string, key: string, all: Evidence[], onOpen?: (id
       <button
         key={`${key}-m${nodes.length}`}
         type="button"
-        className="evidence-media-chip"
+        className={`evidence-media-chip ${target?.kind === "image" && target.content.startsWith("data:image/") ? "has-thumbnail" : ""}`}
         disabled={!target}
         onClick={target && onOpen ? () => onOpen(target.id) : undefined}
         title={target ? `打开：${target.name}` : "该媒体未下载，请在渠道内单独导出"}
       >
-        {marker.name ? `${marker.label}：${marker.name}` : marker.label}
+        {target?.kind === "image" && target.content.startsWith("data:image/") && <Image src={target.content} alt={target.name} width={240} height={180} unoptimized />}
+        <span>{marker.name ? `${marker.label}：${marker.name}` : marker.label}</span>
       </button>,
     );
     last = matched.index + matched[0].length;
   }
   if (last < line.length) nodes.push(...linkify(line.slice(last), `${key}-t${nodes.length}`));
   return nodes;
+}
+
+type TranscriptBlock = { type: "message"; stamp: string; sender: string; text: string } | { type: "text"; text: string };
+
+// Read A's timestamped transcript format without changing the underlying evidence.
+export function parseChatTranscript(content: string): TranscriptBlock[] {
+  const blocks: TranscriptBlock[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(/^\[(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]\s+([^:\r\n]{1,120})[:：][ \t]?(.*)$/);
+    if (match) blocks.push({ type: "message", stamp: match[1], sender: match[2], text: match[3] });
+    else if (blocks.length) blocks[blocks.length - 1].text += "\n" + line;
+    else blocks.push({ type: "text", text: line });
+  }
+  return blocks;
 }
 
 export function EvidenceContent({
@@ -100,6 +116,25 @@ export function EvidenceContent({
   onOpen?: (id: string) => void;
 }) {
   const chat = item.kind === "chat";
+  const blocks = chat ? parseChatTranscript(item.content) : [];
+  if (blocks.some(block => block.type === "message")) {
+    return <div className="evidence-content evidence-chat-transcript" aria-label="聊天原文">
+      {blocks.map((block, index) => {
+        if (block.type === "text") return <p className="transcript-context" key={index}>{linkify(block.text, `context-${index}`)}</p>;
+        const day = block.stamp.slice(0, 10), previous = blocks[index - 1];
+        const newDay = previous?.type !== "message" || previous.stamp.slice(0, 10) !== day;
+        return <div className="transcript-group" key={index}>
+          {newDay && <div className="transcript-day">{day}</div>}
+          <article className="transcript-row">
+            <span className="transcript-avatar" aria-hidden="true">{Array.from(block.sender)[0]}</span>
+            <div className="transcript-message"><header><strong>{block.sender}</strong><time dateTime={block.stamp.replace(" ", "T")}>{block.stamp.slice(11)}</time></header>
+              <div className="transcript-bubble">{renderChatLine(block.text, `m${index}`, all, onOpen)}</div>
+            </div>
+          </article>
+        </div>;
+      })}
+    </div>;
+  }
   return (
     <div className={`evidence-content ${chat ? "is-chat" : ""}`}>
       {item.content.split("\n").map((line, index) =>

@@ -104,3 +104,33 @@
 .evidence-media-chip:hover:not(:disabled) { background:#ad88594d; }
 .evidence-media-chip:disabled { opacity:.45; cursor:not-allowed; }
 @media(max-width:550px) { .contract-source-dialog > .evidence-content { padding:18px; font-size:12px; } }
+/* Imported transcripts share the channel preview's sender/time/bubble hierarchy. */
+.evidence-content.evidence-chat-transcript { padding:22px 32px 32px; background:#e9e0ce; white-space:normal; }
+.evidence-chat-transcript .transcript-context { white-space:pre-wrap; margin:0 0 18px; font-size:13px; color:#78634c; line-height:1.8; }
+.transcript-day { display:table; margin:10px auto 22px; padding:5px 12px; border-radius:5px; background:#d7c9b3; color:#735e48; font-size:12px; font-variant-numeric:tabular-nums; }
+.transcript-row { display:flex; align-items:flex-start; gap:12px; margin:0 0 24px; }
+.transcript-avatar { display:grid; place-items:center; flex:0 0 34px; width:34px; height:34px; border:1px solid #b69b72; border-radius:8px; background:#d2b98f; color:#513820; font-size:15px; }
+.transcript-message { min-width:0; max-width:min(640px,calc(100% - 46px)); }
+.transcript-message>header { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 14px; margin:0 0 7px; }
+.transcript-message>header strong { font-size:13px; font-weight:600; color:#5e4730; overflow-wrap:anywhere; }
+.transcript-message time { font-size:12px; color:#8b765e; font-variant-numeric:tabular-nums; }
+.transcript-bubble { padding:12px 15px; border:1px solid #d7c6aa; border-radius:3px 11px 11px; background:#fff9ed; color:#3e3023; font-size:14px; line-height:1.85; white-space:pre-wrap; overflow-wrap:anywhere; }
+.evidence-media-chip.has-thumbnail { display:inline-flex; flex-direction:column; align-items:flex-start; max-width:100%; padding:6px; gap:7px; border-radius:7px; background:#f7eedc; vertical-align:top; }
+.evidence-media-chip.has-thumbnail img { display:block; width:auto; height:auto; max-width:min(240px,100%); max-height:260px; object-fit:contain; border-radius:3px; }
+.evidence-media-chip.has-thumbnail span { padding:2px 5px; max-width:240px; white-space:normal; overflow-wrap:anywhere; }
+@media(max-width:550px) {
+  .evidence-content.evidence-chat-transcript { padding:18px 14px 24px; }
+  .transcript-row { gap:9px; margin-bottom:19px; }
+  .transcript-avatar { flex-basis:29px; width:29px; height:29px; font-size:13px; border-radius:6px; }
+  .transcript-message { max-width:calc(100% - 38px); }
+  .transcript-message>header strong,.transcript-message time { font-size:12px; }
+  .transcript-bubble { padding:10px 12px; }
+}
+.contract-source-dialog[open] { display:flex; flex-direction:column; overflow:hidden; }
+.contract-source-dialog>header { flex:0 0 auto; }
+.contract-source-dialog>.evidence-content { flex:1; min-height:0; max-height:none; }
+.contract-source-dialog>.source-note { flex:0 0 auto; max-height:28dvh; overflow:auto; }
+.contract-source-dialog>.contract-comparison { min-height:0; overflow:auto; }
+.contract-source-dialog>img { min-height:0; flex-shrink:1; }
+.evidence-media-chip.has-thumbnail { width:min(256px,100%); }
+.evidence-media-chip.has-thumbnail img { width:100%; }
