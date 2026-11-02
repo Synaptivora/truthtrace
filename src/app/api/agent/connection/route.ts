@@ -1,5 +1,6 @@
+import { effectiveConnection as resolveConnection, effectiveConnection as serverConnection } from "@/lib/investigator/connections";
 import { z } from "zod";
-import { ConnectionSchema, resolveConnection, serverConnection } from "@/lib/agent/providers";
+import { ConnectionSchema } from "@/lib/agent/providers";
 import { modelStep } from "@/lib/agent/transport";
 import { readJson } from "@/lib/agent/http";
 export const runtime = "nodejs";

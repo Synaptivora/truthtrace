@@ -5,7 +5,7 @@
 
 支持普通聊天、多轮追问、证据关键词检索、分页读取原文、读取已有分析、点击来源查看原文。示例案件始终标注虚构；真实案件与全局对话按证据 ID 隔离。当前标签页内保留历史和未发送草稿；刷新后清除，不把案件或密钥写入 localStorage/sessionStorage。
 
-模型设置只用于对话 Agent；原有上传后的结构化分析仍使用 AI_* 配置。未配置 Agent 时沿用 AI_*；AI_PROVIDER=mock 时明确显示本地演示。演示只提供操作说明与关键词摘录，不冒充模型推理。
+“测试并加密保存连接”可供对话、材料分析和自主调查共享，或分别设置任务覆盖。未保存共享连接时，原有结构化分析使用 AI_* 配置。未配置 Agent 时沿用 AI_*；AI_PROVIDER=mock 时明确显示本地演示。演示只提供操作说明与关键词摘录，不冒充模型推理。
 
 ## 供应商与协议
 所有预设均支持编辑地址和手填模型 ID，不把可能过期的模型目录硬编码。地域、账号权限、付费套餐与模型能力必须匹配。18 个供应商预设加一个自定义入口：
@@ -74,3 +74,7 @@ AGENT_PROVIDER 可以填写目录 ID；AGENT_PROTOCOL 支持 openai、anthropic�
 - [OpenCode 模型协议](https://opencode.ai/v2/docs/console/models/)、[Hugging Face](https://huggingface.co/docs/inference-providers/index)、[CommandCode](https://commandcode.ai/docs/provider)
 
 浏览器回归：启动应用后执行 `npx playwright install chromium`，再执行 `npm run test:browser`；可用 AGENT_TEST_URL 指定地址。测试创建的案件仅在测试浏览器中，图片保存在被 Git 忽略的 artifacts/agent/。
+
+## 自主调查
+
+完整本地启动、数据备份、验证范围与限制见 [INVESTIGATOR.md](INVESTIGATOR.md)。

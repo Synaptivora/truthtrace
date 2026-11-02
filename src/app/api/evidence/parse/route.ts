@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseEvidenceFile } from "@/lib/ingestion/parser";
+import { saveOriginal } from "@/lib/investigator/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -19,7 +20,9 @@ export async function POST(request: Request) {
     const evidence = [];
     for (const file of files) {
       // 聊天信封会展开成「chat + 媒体」多条，普通文件仍是 1 条
-      evidence.push(...await parseEvidenceFile(file));
+      const parsed=await parseEvidenceFile(file);
+      const originalHash=saveOriginal(new Uint8Array(await file.arrayBuffer()));
+      evidence.push(...parsed.map(item=>({...item,originalHash,parserVersion:"ingestion-v1"})));
     }
 
     return NextResponse.json({ evidence });

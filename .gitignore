@@ -17,3 +17,5 @@ services/ingestion/ai_ingest/output/
 services/ingestion/tests/_*/
 
 artifacts/
+
+.truthtrace/
