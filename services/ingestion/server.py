@@ -49,6 +49,7 @@ from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, quote
 
+# 默认不设单文件体积上限；MAX_CONTENT_SIZE > 0 时启用以下可选策略。
 # 唯一的体积闸门：**单份附件**超过这个值就完全不读内容，只回「下载链接 + 解释」。
 #
 # 三个刻意的选择：
@@ -61,7 +62,7 @@ from urllib.parse import urlparse, parse_qs, quote
 # office 抽正文、纯文本直接读——只受字符预算约束（MAX_CONTENT_CHARS），不再按体积二次拦截。
 MAX_CONTENT_SIZE = int(os.environ.get(
     "MAX_CONTENT_SIZE",
-    os.environ.get("MAX_PARSE_SIZE") or os.environ.get("MAX_FILE_SIZE") or str(100 * 1024 * 1024),
+    os.environ.get("MAX_PARSE_SIZE") or os.environ.get("MAX_FILE_SIZE") or "0",
 ))
 MAX_CONTENT_SIZE_MB = MAX_CONTENT_SIZE / 1024 / 1024
 
@@ -942,7 +943,7 @@ def build_media_evidence(item: dict, media_dir: str | None = None,
     # 体积直接决定耗时；图片只做 base64、不解析，不受此限（与上传侧保持一致）。
     # 本函数原先完全没有体积判断，超大文档会整段进解析流程，这里补上的是文档那一半。
     kind = media_kind(name, mime)
-    if raw and len(raw) > MAX_CONTENT_SIZE and kind != "image":
+    if MAX_CONTENT_SIZE > 0 and raw and len(raw) > MAX_CONTENT_SIZE and kind != "image":
         return oversize_evidence(name, mime, raw, origin or "聊天媒体")
 
     if kind == "image":
@@ -1181,13 +1182,14 @@ def build_evidence(filename, mime, data: bytes, origin: str | None = None,
     if (mime or "").lower() in ("", "application/octet-stream", "binary/octet-stream"):
         mime = sniff_mime(data) or mime
 
-    # 唯一的体积闸门：>100MB 不读内容，只回「链接 + 解释」。
+    # 默认不设单文件体积上限；MAX_CONTENT_SIZE > 0 时启用以下可选策略。
+    # 显式启用阈值后，超限文档只回下载链接与解释。
     # ⚠️ **只管需要解析的文档**（PDF / Word / Excel / 文本）：抽正文、渲染页面的耗时
     # 随体积线性增长，必须在解析之前止损——这道闸门存在的全部理由就是防解析超时。
     # 图片不解析，只是 base64 塞进 content，不存在「解析太久」，因此**不受此限**。
     # （图片若大到模型收不下，那是 analyze 那一跳的事，应由 B 按 content 长度处理，
     #   不是在这里按文件体积拦——这里拦了反而会让「图能进、文档不能进」的怪现象。）
-    if data and len(data) > MAX_CONTENT_SIZE and media_kind(filename or "", mime or "") != "image":
+    if MAX_CONTENT_SIZE > 0 and data and len(data) > MAX_CONTENT_SIZE and media_kind(filename or "", mime or "") != "image":
         return oversize_evidence(filename, mime, data, origin, base_url)
 
     kind = evidence_kind(filename or "", mime or "", data)

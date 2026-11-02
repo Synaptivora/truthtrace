@@ -1,3 +1,5 @@
+> 当前默认不设单文件大小上限。以下 100 MB 分流说明仅适用于显式设置 MAX_CONTENT_SIZE=104857600 的部署。字符预算、模型上下文和部署限制独立生效。
+
 # A 环节 · 证据解析服务
 
 > 位置：`truthtrace/services/ingestion/`（**已进仓库**，A 模块唯一归属目录）
@@ -372,7 +374,7 @@ python -m pip install pysilk faster-whisper   # 建议独立 3.13 venv：ctransl
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `PORT` | 8000 | 服务端口（也可 `python server.py --port 9000`） |
-| `MAX_CONTENT_SIZE` | 100MB | 唯一体积闸门；**只作用于文档**，图片不受限 |
+| `MAX_CONTENT_SIZE` | 0（不限制） | 唯一体积闸门；**只作用于文档**，图片不受限 |
 | `VISION_IMAGE_HINT_MB` | 8 | 图片超此值只在 `name` 标注「可能超出模型单图上限」；设 `0` 关闭 |
 | `PUBLIC_BASE_URL` | 按请求 Host 推断 | 超限附件的下载链接前缀 |
 | `CORS_ALLOW_ORIGIN` | `*` | 允许前端直连 A（已全开） |

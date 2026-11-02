@@ -5,7 +5,7 @@
 ## 两条路径
 
 - **导入示例材料**：保留 C 原有的 500 元押金推理演示，全部标为虚构预设数据。演示原文由 `case-data.mjs` 生成，不与 B 的 300 元团队测试样例或真实上传混合。
-- **自己选择文件**：`api-client.ts` 调用现有 `POST /api/evidence/parse`（字段 `files`）和 `POST /api/analyze`（`{ evidence }`）。返回数据按现有契约校验后，交给 `ContractWorkbench` 展示，保留 `mock/model`、错误反馈及原文引用。人物和疑点来自接口，前端不套用演示结论。文件上限与内置解析器一致，为单份 8 MB。
+- **自己选择文件**：`api-client.ts` 调用现有 `POST /api/evidence/parse`（字段 `files`）和 `POST /api/analyze`（`{ evidence }`）。返回数据按现有契约校验后，交给 `ContractWorkbench` 展示，保留 `mock/model`、错误反馈及原文引用。人物和疑点来自接口，前端不套用演示结论。前端与内置解析器均不设单文件大小上限。
 
 ## 维护位置
 
