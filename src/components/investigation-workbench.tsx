@@ -21,12 +21,12 @@ const assets = {
   "inspector-avatar.png": avatar.src, "students.jpg": students.src,
 };
 
-function Studio({ onAnalysisReady, onContext }: { onAnalysisReady: (result: CaseAnalysis) => void; onContext: (context: AgentContext | null) => void }) {
+function Studio({ onAnalysisReady, onContext, cases, onOpenCase }: { onAnalysisReady: (result: CaseAnalysis) => void; onContext: (context: AgentContext | null) => void; cases: CaseAnalysis[]; onOpenCase: (id: string) => void }) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!root.current) return;
-    return mountStudio(root.current, { assets, analyzeFiles, onAnalysisReady, onContext });
-  }, [onAnalysisReady, onContext]);
+    return mountStudio(root.current, { assets, analyzeFiles, onAnalysisReady, onContext, cases, onOpenCase });
+  }, [onAnalysisReady, onContext, cases, onOpenCase]);
   return <div ref={root} className="studio-host" aria-label="TruthTrace 案件工作空间" />;
 }
 
@@ -35,9 +35,15 @@ function Studio({ onAnalysisReady, onContext }: { onAnalysisReady: (result: Case
 export function InvestigationWorkbench(_initialData: WorkbenchProps) {
   const [sample, setSample] = useState<AgentContext | null>(null);
   const onContext = useCallback((value: AgentContext | null) => setSample(value), []);
-  const [home, setHome] = useState(false);
-  const [result, setResult] = useState<CaseAnalysis | null>(null);
-  const openAnalysis = useCallback((value: CaseAnalysis) => { setHome(false); setResult(value); }, []);
-  function goHome() { history.replaceState(null, "", "#home"); setHome(true); }
-  return <>{result && !home ? <ContractWorkbench result={result} onHome={goHome} /> : <>{result && <button className="resume-analysis" onClick={() => setHome(false)}>继续查看：{result.caseName || result.analysis.caseTitle} →</button>}<Studio onAnalysisReady={openAnalysis} onContext={onContext} /></>}<AgentPanel context={result && !home ? result : sample} /></>;
+  const [cases, setCases] = useState<CaseAnalysis[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const openAnalysis = useCallback((value: CaseAnalysis) => {
+    const next = { ...value, caseId: value.caseId || crypto.randomUUID() };
+    setCases(previous => [...previous.filter(item => item.caseId !== next.caseId), next]);
+    setActiveId(next.caseId);
+  }, []);
+  const openCase = useCallback((id: string) => setActiveId(id), []);
+  function goHome() { history.replaceState(null, "", "#home"); setSample(null); setActiveId(null); }
+  const result = cases.find(item => item.caseId === activeId);
+  return <>{result ? <ContractWorkbench key={result.caseId} result={result} onHome={goHome} onUpdate={openAnalysis} /> : <Studio cases={cases} onOpenCase={openCase} onAnalysisReady={openAnalysis} onContext={onContext} />}<AgentPanel context={result || sample} /></>;
 }

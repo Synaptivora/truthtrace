@@ -33,3 +33,13 @@ describe("C 与团队 API 的接入边界", () => {
     await expect(analyzeFiles([new File(["x"], "x.txt")], new AbortController().signal, vi.fn())).rejects.toThrow("分析结果未通过格式校验");
   });
 });
+
+it("补证时携带原有材料，碰撞 ID 重新编号，旧材料不被覆盖", async () => {
+  const request = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ evidence: [source] })).mockResolvedValueOnce(Response.json({ analysis }));
+  vi.stubGlobal("fetch", request);
+  const result = await analyzeFiles([new File(["新材料"], "new.txt")], new AbortController().signal, vi.fn(), [source]);
+  expect(result.evidence).toHaveLength(2);
+  expect(result.evidence[0]).toEqual(source);
+  expect(result.evidence[1].id).not.toBe(source.id);
+  expect(JSON.parse(String(request.mock.calls[1][1]?.body)).evidence).toEqual(result.evidence);
+});

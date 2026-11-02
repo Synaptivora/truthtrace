@@ -1,7 +1,7 @@
 import { AnalysisResultSchema, EvidenceSchema } from "@/lib/contracts";
 import type { AnalysisResult, Evidence } from "@/lib/contracts";
 
-export type CaseAnalysis = { evidence: Evidence[]; analysis: AnalysisResult; caseName?: string };
+export type CaseAnalysis = { evidence: Evidence[]; analysis: AnalysisResult; caseName?: string; caseId?: string; reviewNotes?: Record<string, string> };
 
 async function readReply(response: Response, fallback: string): Promise<Record<string, unknown>> {
   let value: unknown;
@@ -13,18 +13,19 @@ async function readReply(response: Response, fallback: string): Promise<Record<s
 }
 
 // These are the existing B-owned routes; C does not change their fields.
-export async function analyzeFiles(files: File[], signal: AbortSignal, onParsed: () => void): Promise<CaseAnalysis> {
+export async function analyzeFiles(files: File[], signal: AbortSignal, onParsed: () => void, existing: Evidence[] = []): Promise<CaseAnalysis> {
   const body = new FormData();
   files.forEach(file => body.append("files", file));
   const parsedReply = await readReply(await fetch("/api/evidence/parse", { method: "POST", body, signal }), "材料解析失败，请稍后重试。");
   const parsed = EvidenceSchema.array().min(1).safeParse(parsedReply.evidence);
   if (!parsed.success) throw new Error("材料解析结果无效，请重试。");
   onParsed();
+  const combined = [...existing, ...parsed.data.map(item => existing.some(old => old.id === item.id) ? { ...item, id: crypto.randomUUID() } : item)];
   const analysisReply = await readReply(await fetch("/api/analyze", {
     method: "POST", signal, headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ evidence: parsed.data }),
+    body: JSON.stringify({ evidence: combined }),
   }), "分析失败，请稍后重试。");
   const result = AnalysisResultSchema.safeParse(analysisReply.analysis);
   if (!result.success) throw new Error("分析结果未通过格式校验，请重试。");
-  return { evidence: parsed.data, analysis: result.data };
+  return { evidence: combined, analysis: result.data };
 }

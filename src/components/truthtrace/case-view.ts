@@ -1,0 +1,27 @@
+import type { AnalysisResult, EvidenceRef, TimelineEvent } from "@/lib/contracts";
+import type { CaseAnalysis } from "./api-client";
+
+// Merge exact duplicate events only; keep differing accounts separate and retain sources.
+export function mergeTimeline(events: TimelineEvent[]): TimelineEvent[] {
+  const merged = new Map<string, TimelineEvent>();
+  for (const event of events) {
+    const key = JSON.stringify([event.occurredAt, event.timeLabel.trim(), event.timePrecision, event.title.trim(), event.description.trim()]);
+    const previous = merged.get(key);
+    if (!previous) merged.set(key, { ...event, evidenceRefs: [...event.evidenceRefs], participantIds: [...event.participantIds] });
+    else {
+      previous.participantIds = [...new Set([...previous.participantIds, ...event.participantIds])];
+      previous.evidenceRefs = uniqueRefs([...previous.evidenceRefs, ...event.evidenceRefs]);
+    }
+  }
+  return [...merged.values()].sort((a, b) => a.occurredAt === b.occurredAt ? 0 : !a.occurredAt ? 1 : !b.occurredAt ? -1 : a.occurredAt.localeCompare(b.occurredAt));
+}
+export function uniqueRefs(refs: EvidenceRef[]): EvidenceRef[] {
+  return [...new Map(refs.map(ref => [JSON.stringify([ref.evidenceId, ref.quote, ref.locator]), ref])).values()];
+}
+export function analysisReport(result: CaseAnalysis, notes: Record<string, string>): string {
+  const { analysis, evidence } = result;
+  const sources = (refs: EvidenceRef[]) => uniqueRefs(refs).map(ref => `  - [${ref.evidenceId}] ${evidence.find(e => e.id === ref.evidenceId)?.name || "来源缺失"}：${ref.quote}${ref.locator ? `（${ref.locator}）` : ""}`);
+  return ["# " + (result.caseName || analysis.caseTitle), "", analysis.analysisMode === "mock" ? "模拟分析 · 不代表真实识别结论。" : "模型整理 · 以下疑点尚待人工核实。", `生成时间：${analysis.generatedAt}`, "", "## 事件概况", analysis.summary, "", "## 涉及人物与主体", ...analysis.people.flatMap(p => [`- ${p.name} / ${p.role}：${p.summary}`, ...sources(p.evidenceRefs)]), "", "## 事件时间线", ...mergeTimeline(analysis.events).flatMap(e => [`- ${e.timeLabel} ${e.title}：${e.description}`, ...sources(e.evidenceRefs)]), "", "## 待核查问题", ...analysis.contradictions.flatMap(c => [`- 待核实：${c.title}。${c.description}`, ...sources(c.evidenceRefs)]), "", "## 补充材料", ...analysis.evidenceGaps.flatMap(g => [`- ${g.title}：${g.suggestedEvidence}`, ...sources(g.evidenceRefs)]), "", "## 核查备注（人工填写，未经模型重分析）", ...Object.entries(notes).filter(([, note]) => note.trim()).map(([id, note]) => `- [${id}] ${note}`), "", "## 原始材料索引", ...evidence.map(e => `- [${e.id}] ${e.name} / ${e.source || e.kind}`)].join("\n");
+}
+export const materialKinds: Record<string, string> = { text: "文本", chat: "聊天记录", image: "图片", pdf: "PDF 文件" };
+export type { AnalysisResult };
