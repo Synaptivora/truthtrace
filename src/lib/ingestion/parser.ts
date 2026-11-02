@@ -1,6 +1,5 @@
 import { EvidenceSchema, type Evidence } from "../contracts";
 
-const MAX_FILE_SIZE = 8 * 1024 * 1024;
 
 function evidenceKind(file: File): Evidence["kind"] {
   if (file.type.startsWith("image/")) return "image";
@@ -30,7 +29,6 @@ async function parseRemotely(file: File, serviceUrl: string): Promise<Evidence> 
 
 export async function parseEvidenceFile(file: File): Promise<Evidence> {
   if (file.size === 0) throw new Error(`${file.name} 是空文件`);
-  if (file.size > MAX_FILE_SIZE) throw new Error(`${file.name} 超过 8 MB 限制`);
 
   const serviceUrl = process.env.INGESTION_SERVICE_URL;
   if (serviceUrl) return parseRemotely(file, serviceUrl);

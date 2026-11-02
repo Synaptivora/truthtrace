@@ -97,7 +97,7 @@ def main():
     spec = importlib.util.spec_from_file_location("probe", SERVER)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    check("唯一阈值默认 100MB", round(mod.MAX_CONTENT_SIZE_MB) == 100,
+    check("默认不限制单文件大小", mod.MAX_CONTENT_SIZE == 0,
           f"{mod.MAX_CONTENT_SIZE_MB}MB")
     check("旧的 20MB 解析上限已取消", not hasattr(mod, "MAX_PARSE_SIZE"))
     check("旧的 100MB 硬上限常量已合并", not hasattr(mod, "MAX_FILE_SIZE"))
