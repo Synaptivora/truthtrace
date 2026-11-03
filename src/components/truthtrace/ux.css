@@ -121,6 +121,42 @@
 @media(prefers-reduced-motion:reduce) { .entry-brand>img,.empty-room-cat>img { transition:none; }.empty-room-cat.mascot-petting>img,img.mascot-petting { animation:none; } }
 .contract-investigation>header,.contract-investigation nav { flex-wrap:wrap; }
 .view-tabs button:nth-child(3) { display:inline-flex; }
+/* Real cases use the same paper, photos and pins as the example case. */
+.contract-topbar>.contract-case-heading { flex:1; min-width:160px; }
+.contract-topbar>.investigator-entry { font-size:14px; font-weight:600; min-height:42px; padding:10px 16px; }
+.contract-brand { flex-direction:column; gap:2px; }
+.contract-brand>span { font:12px var(--sans); letter-spacing:0; }
+.contract-shell { padding-bottom:78px; }
+.graph-canvas { overflow:hidden; touch-action:none; }
+.graph-paper-node.react-flow__node { padding:12px; border:1px solid #b89967; border-radius:3px; background:linear-gradient(120deg,#f7ecd3,#e9d8b5); color:#493423; box-shadow:2px 5px 8px #35200f40; text-align:left; }
+.graph-paper-node::before { content:''; position:absolute; top:-6px; left:50%; width:12px; height:12px; border-radius:50%; background:radial-gradient(circle at 32% 25%,#eaa18a,#a42e20 55%,#581d14); box-shadow:1px 2px 3px #30170a66; z-index:1; }
+.graph-paper-node.is-focused { outline:3px solid #eebd6f; outline-offset:3px; }
+.graph-paper-node .react-flow__handle { opacity:0; }
+.graph-person-card { display:flex; align-items:center; gap:14px; min-height:86px; }
+.graph-portrait { display:grid; place-items:center; width:64px; height:74px; flex-shrink:0; background:#d9c6a0; border:4px solid #fff5de; box-shadow:1px 2px 3px #74533033; }
+.graph-portrait>svg { width:38px; height:46px; color:#856340; }
+.graph-portrait>.pixel-person { width:44px; height:55px; fill:initial; stroke:none; }
+.graph-card-copy { min-width:0; }
+.graph-card-copy>span { display:block; font-size:12px; color:#876640; margin-bottom:7px; }
+.graph-card-copy>strong { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:18px; line-height:1.5; overflow-wrap:anywhere; }
+.contract-graph-evidence { padding:0; }
+.evidence-thumbnail { display:grid; place-items:center; height:110px; width:100%; background:#d8c4a0; color:#9b7749; overflow:hidden; border:4px solid #fff4dc; }
+.evidence-thumbnail>img { display:block; width:100%; height:100%; object-fit:cover; object-position:top; }
+.graph-evidence-copy { display:block; padding:10px 3px 1px; }
+.graph-evidence-copy>small { font-size:11px; color:#86613a; }
+.graph-evidence-copy>strong { margin:5px 0 0; font-size:14px; line-height:1.55; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+.contract-material-card { gap:12px; padding:14px; }
+.contract-material-card>.evidence-thumbnail { height:150px; }
+.graph-reset { padding:8px 12px; border:1px solid #a5814c; border-radius:5px; background:#f2e2c3; color:#62472c; font:12px var(--sans); box-shadow:0 2px 5px #0002; }
+.graph-canvas .react-flow__controls { box-shadow:0 2px 6px #0003; }
+.graph-canvas .react-flow__controls-button { width:32px; height:32px; }
+.contract-immersive .contract-columns { grid-template-columns:minmax(0,1fr); min-height:0; }
+.contract-immersive .contract-catalog,.contract-immersive .contract-findings { display:none; }
+.brand-home-label { position:absolute; top:100%; left:50%; transform:translateX(-50%); white-space:nowrap; margin-top:6px!important; color:#d4b78b!important; letter-spacing:0!important; font:11px/1.4 var(--sans)!important; }
+.entry-header { justify-content:space-between; }
+.app-model-link { padding:7px 9px; border:1px solid #bda47a; border-radius:7px; background:#fffaf0; color:#654d32; font:12px var(--sans); white-space:nowrap; }
+@media(max-width:1100px) { body:not(.case-entry):has(.studio-host) .app-settings-trigger { left:4px; width:64px; flex-direction:column; gap:4px; padding:10px 0; border:0; border-radius:0; box-shadow:none; background:#221f19; font-size:11px; } }
+@media(max-width:550px) { .contract-shell { padding-bottom:82px; }.contract-topbar { gap:10px; }.contract-brand>span { display:block; }.contract-case-heading { flex-basis:calc(100% - 90px)!important; }.contract-immersive .contract-columns { flex:1; min-height:0; }.contract-immersive .contract-investigation { min-height:0; }.contract-immersive .graph-canvas { min-height:0; } }
 @media(max-width:700px) { .view-tabs button { min-height:34px; font-size:12px; padding:7px 9px; } }
 
 .graph-toolbar{position:absolute;z-index:12;top:8px;left:8px;max-width:calc(100% - 16px);display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;background:#f7edda;color:#503820;border:1px solid #b78d53;border-radius:8px;font-size:12px}.graph-toolbar label{display:flex;gap:5px;align-items:center}.graph-toolbar select{max-width:150px}.graph-toolbar details[open]{flex-basis:100%;max-height:180px;overflow:auto}.graph-toolbar details button{display:block;text-align:left;padding:7px;background:none;color:inherit;border:0}.graph-person-peek{top:82px}.graph-person-peek blockquote{margin:10px 0;padding:8px;background:#fff8e8;font-size:12px;white-space:pre-wrap}.ci-auth>img{display:block;margin:12px auto}.ci-auth small{display:block;margin-top:10px}

@@ -34,10 +34,6 @@
 .contract-graph-evidence small { display:block; color:#a07845; font-size:8px; }
 .contract-graph-evidence strong { display:block; font-size:12px; line-height:1.8; margin:8px 0; overflow-wrap:anywhere; }
 .contract-graph-evidence span { color:#997143; font-size:9px; }
-.contract-shell .graph-node-content { text-align:left; padding:7px; display:flex; flex-direction:column; gap:7px; }
-.contract-shell .graph-node-role { font-size:9px; color:#a07943; }
-.contract-shell .graph-node-content>strong { font-size:16px; }
-.contract-shell .graph-node-content>span:last-child { font-size:10px; line-height:1.8; color:#8a683d; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
 .contract-focus-bar { display:flex; align-items:center; justify-content:space-between; padding:9px 13px; font-size:10px; background:#6d4d2b; color:#edd09e; }
 .contract-focus-bar button { background:transparent; color:#e0ba7c; padding:3px; font-size:10px; }
 .contract-assistant { display:flex; align-items:center; gap:10px; padding:8px 12px; border-top:1px solid #b0864566; background:#3b2b1e; }

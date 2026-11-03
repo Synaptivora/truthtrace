@@ -84,7 +84,6 @@ function renderMain() {
   state.clues=CLAIMS.filter(c=>items.some(e=>e.id===c.sourceId)).map(c=>c.id);
   $('#immersiveSummary').textContent='虚构示例 · 原始材料可追溯';
   $('.case-badge').textContent='待核实';
-  $('.sync-status').innerHTML='<i></i>虚构示例';
   $('.recent-evidence').innerHTML=`<div class="sidebar-heading">最近证据 <span>${count(items.length)}</span></div>`+items.slice().reverse().slice(0,5).map(e=>`<button class="recent-file" type="button" data-action="evidence" data-id="${e.id}"><span class="file-icon">${icon('file')}</span><span><strong>${esc(e.title)}</strong><small>${e.id} · ${e.date}${state.read.includes(e.id)?' · 已阅':''}</small></span></button>`).join('');
   $('#clueCount').textContent=state.clues.length;
   const finding=$('.finding-paper');
