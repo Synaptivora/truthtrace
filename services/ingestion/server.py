@@ -1680,7 +1680,7 @@ def main():
                 port = int(sys.argv[i + 1])
             except ValueError:
                 pass
-    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    server = ThreadingHTTPServer((os.environ.get("INGESTION_HOST", "127.0.0.1"), port), Handler)
     print(f"[A 解析服务] 已启动: http://localhost:{port}")
     print(f"  POST /parse      单文件 → 单条 evidence (B 当前兼容)")
     print(f"  POST /parse_chat 聊天JSON → evidences[] bundle (需 B 改 parser 支持数组)")

@@ -21,6 +21,7 @@ export class Store {
     this.db = new DatabaseSync(join(directory, "cases.sqlite"));
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS worker_health(id TEXT PRIMARY KEY, updated INTEGER);
+      CREATE TABLE IF NOT EXISTS analysis_history(seq INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT, at TEXT, body TEXT);
       CREATE TABLE IF NOT EXISTS cases(id TEXT PRIMARY KEY, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS evidence(case_id TEXT, id TEXT, version INTEGER, hash TEXT, body TEXT, PRIMARY KEY(case_id,id,version));
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, case_id TEXT, idem TEXT, state TEXT, lease INTEGER, owner TEXT, body TEXT, UNIQUE(case_id,idem));
@@ -106,4 +107,3 @@ export class Store {
   }
   close() {this.db.close();}
 }
-

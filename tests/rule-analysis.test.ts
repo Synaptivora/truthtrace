@@ -29,9 +29,9 @@ describe("本地规则分析", () => {
     expect(result.people.every(person => person.evidenceRefs.length > 0)).toBe(true);
   });
 
-  it("产出关系与时间片段，且引用都能在原文里找到", () => {
+  it("产出时间片段，但不把同群发言当作人物关系", () => {
     const result = createRuleAnalysis([chat(lines)]);
-    expect(result.relationships.length).toBeGreaterThan(0);
+    expect(result.relationships).toEqual([]);
     expect(result.events.length).toBeGreaterThan(0);
     const peopleIds = new Set(result.people.map(person => person.id));
     for (const relation of result.relationships) {

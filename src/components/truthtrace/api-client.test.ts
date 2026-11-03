@@ -16,7 +16,7 @@ describe("C 与团队 API 的接入边界", () => {
     const upload = request.mock.calls[0][1]?.body as FormData;
     expect(upload.getAll("files")).toHaveLength(1);
     expect(upload.has("file")).toBe(false);
-    expect(JSON.parse(String(request.mock.calls[1][1]?.body))).toEqual({ evidence: [source] });
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body))).toEqual({ evidence: [source], allowFallback:true });
     expect(parsed).toHaveBeenCalledOnce();
     expect(result.evidence).toEqual([source]);
     expect(result.analysis.analysisMode).toBe("mock");

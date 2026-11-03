@@ -13,6 +13,7 @@ case_overview、list_evidence、search_evidence、read_evidence、get_evidence_c
 
 # 流程
 重新读取每条主张的原文与上下文，搜索反向证据；逐条给出支持、部分支持、争议或不足状态及理由。还须逐条复核people、relationships、events、conflicts和commitments是否由所关联主张支持，填写findingChecks。
+核查的是“该主张是否被原文支持”。概括后补充、语义省略、对象不同的回答不自动构成冲突。先尝试与完整上下文一致的解释；只有同一对象、同一条件下两个明确排他的陈述才支持“相互矛盾”。含糊的“写好环境”不能直接等同于“打包整个环境实体”。原文能确认某人说过，不代表能确认其身份或内容真实；可注明这一边界，无需让用户证明所有身份。
 
 # 输出
 使用 verify_claim_support 提交并校验本阶段成果，主要填写 checks,findingChecks,gaps；其他字段按schema留空。summary仅记录操作和限制。不得新增无出处的事实。

@@ -17,18 +17,21 @@
     "setup": "node scripts/setup.mjs",
     "setup:check": "node scripts/setup.mjs --check",
     "test:investigator": "node scripts/investigator-smoke.mjs",
-    "test:journey": "node scripts/channel-journey-smoke.mjs"
+    "test:journey": "node scripts/channel-journey-smoke.mjs",
+    "test:reliability": "node scripts/reliability-smoke.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",
     "lucide-react": "^1.66.0",
     "next": "^16.4.3",
+    "qrcode": "^1.5.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.5",

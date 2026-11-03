@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { analyzeEvidence } from "@/lib/ai/provider";
 import { EvidenceSchema } from "@/lib/contracts";
+import { createRuleAnalysis } from "@/lib/ai/rule";
 
 export const runtime = "nodejs";
 // 证据变多之后分析会更久（20 张图 + 长正文），给到 5 分钟；模型侧还有 AI_TIMEOUT_MS 兜底。
@@ -15,6 +16,7 @@ const MAX_EVIDENCE = (() => {
 })();
 
 const RequestSchema = z.object({
+  allowFallback:z.boolean().default(false),
   evidence: z.array(EvidenceSchema).min(1).max(MAX_EVIDENCE).refine(
     items => new Set(items.map(item => item.id)).size === items.length,
     "证据 ID 不可重复",
@@ -32,7 +34,10 @@ export async function POST(request: Request) {
     const { analysis, meta } = await analyzeEvidence(parsed.data.evidence);
     // meta 只是提示信息（正文是否被截断），不进 contracts.ts，C 可忽略
     return NextResponse.json({ analysis, meta });
-  } catch {
-    return NextResponse.json({ error: "分析服务失败或返回结果未通过校验，请稍后重试" }, { status: 502 });
+  } catch (error) {
+    const message=error instanceof Error?error.message:"";
+    const detail=message.startsWith("模型服务 HTTP")?message:error instanceof z.ZodError?"模型结果的结构校验未通过，请重试分析。":/引用|不存在|当前分析连接/.test(message)?message:/timeout|aborted|terminated|fetch failed/i.test(message)?"模型连接中断或超时，请重试分析；原始材料可以保留，不必重新导入。":"模型配置或分析未完成，请检查模型连接后重试。";
+    if(parsed.data.allowFallback)return NextResponse.json({analysis:createRuleAnalysis(parsed.data.evidence),meta:{analysisError:detail,truncated:0,droppedEvidence:0,droppedImages:0,images:0}});
+    return NextResponse.json({ error: detail }, { status: 502 });
   }
 }

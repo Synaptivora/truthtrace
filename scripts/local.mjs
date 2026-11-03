@@ -6,11 +6,10 @@ import { detect, runSetup } from './setup.mjs';
 
 // 一键启动本机全链路：Next 前端 + A 端证据解析服务(Python) + 自主调查员后台。
 // 用法：npm run dev:local（开发）/ npm run start:local（生产构建）。
-// 三个进程同生共死：任何一个退出，其余一并结束（Ctrl+C 一次全部停掉）。
+// 前端退出或 Ctrl+C 时停止本次启动的子进程；渠道后台失败不再连带杀死前端。
 //
-// 启动前会做一次「本机工具自动装配」：缺 dws / lark-cli / Python 依赖 /
-// wechat-ai-memory 源码 / .env.local 就自动补齐，已齐全则跳过（幂等）。
-// 想完全跳过这一步：SYNAPSE_SKIP_AUTO_SETUP=1 npm run dev:local
+// 默认直接启动，渠道工具在接入时按需准备。
+// 需要预装全部渠道依赖时：设置 SYNAPSE_AUTO_SETUP=1，或运行 npm run setup。
 
 const mode = process.argv.includes('--production') ? 'start' : 'dev';
 
@@ -26,7 +25,7 @@ function loadEnvLocal() {
 }
 
 // ---- 启动前自动装配（只补缺的，不重复装）----
-if (process.env.SYNAPSE_SKIP_AUTO_SETUP !== '1') {
+if (process.env.SYNAPSE_AUTO_SETUP === '1' && process.env.SYNAPSE_SKIP_AUTO_SETUP !== '1') {
   try {
     const before = await detect();
     if (before.ready) {
@@ -74,13 +73,13 @@ function launch(label, command, args, options = {}) {
 
 // 1) A 端证据解析服务：services/ingestion/server.py（依赖已装则直接可用）
 if (existsSync('services/ingestion/server.py')) {
-  launch('A 解析服务 (' + INGESTION_PORT + ')', 'python', ['server.py'], { cwd: 'services/ingestion' });
+  launch('A 解析服务 (' + INGESTION_PORT + ')', env.SYNAPSE_PYTHON || (process.platform==='win32'?'python':'python3'), ['server.py','--port',INGESTION_PORT], { cwd: 'services/ingestion' });
 } else {
   console.warn('[local] 未找到 services/ingestion/server.py，跳过 A 解析服务');
 }
 
 // 2) Next 前端（读取 .env.local 里的 INGESTION_SERVICE_URL）
-launch('Next 前端', process.execPath, ['node_modules/next/dist/bin/next', mode, '--hostname', '127.0.0.1']);
+const frontend=launch('Next 前端', process.execPath, ['node_modules/next/dist/bin/next', mode, '--hostname', '127.0.0.1']);
 
 // 3) 自主调查员后台
 if (existsSync('scripts/investigator-worker.ts')) {
@@ -93,6 +92,6 @@ function stop() {
   stopping = true;
   for (const child of children) child.kill();
 }
-for (const child of children) child.on('exit', code => { stop(); process.exitCode = code || 0; });
+for (const child of children) child.on('exit', code => { if(child===frontend){stop();process.exitCode=code||0;}else if(!stopping)console.warn(`[local] 后台进程退出 (${code})，前端继续运行；可在界面重新连接。`); });
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

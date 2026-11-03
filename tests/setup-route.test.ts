@@ -4,6 +4,7 @@ vi.mock("../scripts/setup.mjs", () => ({
   detect: vi.fn(async () => ({ ready: true })),
   runSetup: vi.fn(), actionDingtalkLogin: vi.fn(), actionCaptureWechatKey: vi.fn(),
 }));
+vi.mock("@/lib/ingestion/service",()=>({ensureIngestion:vi.fn(async()=>{})}));
 import { GET, POST } from "../src/app/api/setup/route";
 import { detect, runSetup } from "../scripts/setup.mjs";
 
@@ -22,6 +23,11 @@ it("rejects remote hosts and cross-origin reads before detection", async () => {
 });
 it("supports IPv6 loopback", async () => {
   expect((await GET(request("[::1]:3000"))).status).toBe(200);
+});
+it("accepts a real loopback Origin when Next internally uses localhost",async()=>{
+  const req=new Request("http://localhost:3000/api/setup",{headers:{host:"127.0.0.1:3000",origin:"http://127.0.0.1:3000"}});
+  expect((await GET(req)).status).toBe(200);
+  expect((await GET(new Request("http://localhost:3000/api/setup",{headers:{host:"127.0.0.1:3000",origin:"http://localhost:3000"}}))).status).toBe(403);
 });
 it("disables reads and writes with the configuration switch", async () => {
   vi.stubEnv("SYNAPSE_SETUP_ENABLED", "0");

@@ -16,6 +16,7 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
   const { analysis, evidence } = result;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [analyzing,setAnalyzing]=useState(false);
   const [notes, setNotes] = useState<Record<string, string>>(result.reviewNotes || {});
   const [comparison, setComparison] = useState<string | null>(null);
   const upload = useRef<HTMLInputElement>(null);
@@ -67,6 +68,10 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
     const url = URL.createObjectURL(new Blob([analysisReport(result, notes)], { type: "text/markdown;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = "TruthTrace-调查报告.md"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  async function reanalyze(){setAnalyzing(true);setError("");try{
+    const response=await fetch(`/api/cases/${result.caseId}/analyze`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const data=await response.json();
+    if(!response.ok)throw new Error(data.error||"分析未完成");await onUpdate(data.case);setNoticeOpen(true);
+  }catch(e){setError((e as Error).message);}finally{setAnalyzing(false);}}
   const sourceChips = (refs: EvidenceRef[]) => [...new Map(refs.map(ref => [ref.evidenceId, ref])).values()].map((ref, index) => <button type="button" key={index} onClick={() => openSource(ref.evidenceId)} title={ref.quote}>{evidence.find(item => item.id === ref.evidenceId)?.name ?? ref.evidenceId} ↗</button>);
 
   return <div ref={shell} className={`contract-shell ${immersive ? "contract-immersive" : ""}`}>
@@ -77,13 +82,14 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
       <input ref={upload} type="file" accept="image/*,.pdf,.txt,.md" multiple hidden onChange={event => { void supplement(Array.from(event.target.files || [])); event.target.value = ""; }} /><button className="contract-outline" disabled={busy} onClick={() => upload.current?.click()}><Plus size={14} />{busy ? "正在整理…" : "补充材料"}</button><button className="contract-outline" onClick={exportReport}><Download size={14} />导出报告</button>
       <button className="contract-outline" onClick={onHome}><FolderOpen size={14} /> 案件首页</button>
     </header>
+    <div className="contract-import-notice" role="status"><strong>{analysis.analysisMode==="model"?"当前为模型分析，点击连线可查互动依据。":"当前只有材料统计，尚未完成模型分析。"}</strong><button className="contract-outline" disabled={analyzing||busy} onClick={()=>void reanalyze()}>{analyzing?"正在核对原文并整理关系…":analysis.analysisMode==="model"?"重新分析材料":"用模型分析已有材料"}</button>{analysis.analysisMode!=="model"&&<span>无需重新导入；模型连接保存在助手设置中。</span>}</div>
     {busy && <p className="contract-feedback" role="status">正在整理补充材料，现有结果保留。</p>}{error && <p className="contract-feedback" role="alert">{error}</p>}
     {hasNotice && noticeOpen && notice && (
       <div className="contract-import-notice" role="status">
         <strong>{notice.synced ? `已导入 ${notice.synced} 条证据` : "已导入证据"}</strong>
         {notice.truncated && <span>· 超出单次取数上限，只保留了前一部分</span>}
         {notice.droppedEvidence ? <span>· {notice.droppedEvidence} 条材料超出单次上限，未参与本次分析</span> : null}
-        {notice.droppedImages ? <span>· {notice.droppedImages} 张图片超出单次图片上限，未送入模型</span> : null}
+        {notice.droppedImages ? <span>· {notice.droppedImages} 张图片未参与本次分析（当前连接范围或图片预算限制），请查看原图核对</span> : null}
         {notice.truncatedChars ? <span>· {notice.truncatedChars} 条正文过长，模型只读到前一部分</span> : null}
         {notice.skipped?.length ? <span>· {notice.skipped.length} 段被跳过（不在下面证据里）</span> : null}
         {notice.skipped?.map(item => <small key={item.title}>{item.title}：{item.reason}</small>)}

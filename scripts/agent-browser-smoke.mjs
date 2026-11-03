@@ -36,7 +36,7 @@ try {
  await page.getByLabel('API Base URL',{exact:true}).fill('http://127.0.0.1:18765/v1');
  await page.getByLabel('模型 ID',{exact:true}).fill('fixture');
  await page.getByLabel('API Key',{exact:true}).fill('browser-test-secret');
- await page.getByRole('button',{name:'测试连接（一次模型调用）',exact:true}).click();
+ await page.getByRole('button',{name:'临时测试（不会保存）',exact:true}).click();
  await page.getByText(/连接成功：fixture/).waitFor();
  await page.getByRole('button',{name:'对话',exact:true}).click();
  await page.getByLabel('输入问题').fill('你好模型');await page.getByRole('button',{name:'发送',exact:true}).click();
@@ -75,4 +75,3 @@ try {
  assert(!storage.includes('browser-test-secret'));assert.equal(errors.length,0,errors.join('\n'));
  console.log(JSON.stringify({pass:true,protocols:['openai','anthropic','responses'],requests:requests.length,consoleErrors:errors}));
 } catch(error) { await page.screenshot({path:output+'/failure.png',fullPage:true}); throw error; } finally {await browser.close();server.closeAllConnections();server.close();}
-
