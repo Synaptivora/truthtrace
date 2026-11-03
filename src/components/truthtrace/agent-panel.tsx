@@ -7,6 +7,7 @@ import type { AnalysisResult, Evidence } from "@/lib/contracts";
 import { providers, type Connection, type Protocol } from "@/lib/agent/providers";
 import type { AgentEvent, AgentReply } from "@/lib/agent/contracts";
 import { McpGuide } from "./mcp-guide";
+import { AppSettings } from "./app-settings";
 
 export type AgentContext = { evidence: Evidence[]; analysis?: AnalysisResult; caseName?: string; caseId?: string };
 type Turn = { role: "user" | "assistant"; content: string; reply?: AgentReply };
@@ -15,13 +16,13 @@ const initialConnection: Connection = { provider: "openai", protocol: "openai", 
 
 export function AgentPanel({ context }: { context: AgentContext | null }) {
   const [open, setOpen] = useState(false);
-  const [settings, setSettings] = useState(false);
-  const [mcp, setMcp] = useState(false);
+  const [view, setView] = useState<"chat" | "connection" | "model">("chat");
   const [mode, setMode] = useState<Mode>("server");
   const [connection, setConnection] = useState<Connection>(initialConnection);
   const [threads, setThreads] = useState<Record<string, Turn[]>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [server, setServer] = useState("正在检查服务端配置");
+  const [server, setServer] = useState("正在检查模型连接…");
+  const [serverConfigured, setServerConfigured] = useState(false);
   const [probe, setProbe] = useState("");
   const [connectionRole, setConnectionRole] = useState("shared");
   const [testing, setTesting] = useState(false);
@@ -31,7 +32,7 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
   const threadId = context?.caseId || context?.evidence.map(e => e.id).join("|") || "global";
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/agent/connection", { signal: controller.signal }).then(r => r.json()).then(r => setServer(r.error || (r.configured ? `${r.provider} · ${r.model}` : "本地演示（服务端未连接模型）"))).catch(() => {});
+    fetch("/api/agent/connection", { signal: controller.signal }).then(r => r.json()).then(r => { setServerConfigured(Boolean(r.configured)); setServer(r.error || (r.configured ? `${r.provider} · ${r.model}` : "尚未配置模型，可先使用本地演示。")); }).catch(() => { if (!controller.signal.aborted) setServer("暂时无法读取模型配置，请稍后重试。"); });
     return () => { controller.abort(); testRequest.current?.abort(); };
   }, []);
   useEffect(() => {
@@ -55,32 +56,41 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
   }
   async function saveShared() {
     setTesting(true); setProbe("正在验证文本和工具能力并加密保存…");
-    try { const r = await fetch("/api/settings/connection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection, role: connectionRole }) }); const data = await r.json(); setProbe(data.error || data.message); if (r.ok) { setMode("server"); setServer(`${connection.provider} · ${connection.model}`); } }
+    try { const r = await fetch("/api/settings/connection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection, role: connectionRole }) }); const data = await r.json(); setProbe(data.error || data.message); if (r.ok) { setMode("server"); const current = await fetch("/api/agent/connection").then(response => response.json()).catch(() => null); if (current) { setServerConfigured(Boolean(current.configured)); setServer(current.error || (current.configured ? `${current.provider} · ${current.model}` : "尚未配置对话模型。")); } } }
     catch { setProbe("保存失败，请检查本地服务。"); } finally { setTesting(false); }
   }
   return <>
-    <button style={{position:"fixed",right:24,bottom:82,zIndex:60,padding:"8px 16px",background:"#f8efd9",color:"#243c32",borderRadius:8}} onClick={() => { setOpen(true); setSettings(true); setMcp(false); }}>设置</button>
+    <AppSettings />
     <button ref={launcher} className="agent-launcher" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-controls="agent-panel"><MessageCircle size={19} />和咪探长聊聊</button>
-    {open && <aside id="agent-panel" className="agent-panel" ref={panel} tabIndex={-1} aria-label="咪探长对话" onKeyDown={e => { if (e.key === "Escape") close(); }}>
-      <header className="agent-header"><div><strong>Synapse · 咪探长</strong><small>{context?.caseName || "全局助手 · 未选择案件"}</small></div><button className="agent-mcp-trigger" onClick={() => { setMcp(v => !v); setSettings(false); }} aria-label="数据源 MCP 配置" aria-expanded={mcp}><Cable size={18} /></button><button onClick={() => { setSettings(v => !v); setMcp(false); }} aria-label="模型设置" aria-expanded={settings}><Settings size={18} /></button><button onClick={close} aria-label="关闭助手"><X size={20} /></button></header>
-      {mcp && <McpGuide onClose={() => setMcp(false)} />}
-      {settings && !mcp && <section className="agent-settings" aria-label="模型连接设置">
-        <label>连接方式<select aria-label="连接方式" value={mode} onChange={e => { testRequest.current?.abort(); setTesting(false); setMode(e.target.value as Mode); setProbe(""); }}><option value="server">服务端配置</option><option value="custom">选择供应商</option><option value="demo">本地演示 · 不调用模型</option></select></label>
-        {mode === "server" && <p>{server}</p>}
+    {open && <aside id="agent-panel" className={`agent-panel agent-view-${view}`} ref={panel} tabIndex={-1} aria-label="Synapse · 咪探长" onKeyDown={e => { if (e.key === "Escape") close(); }}>
+      <header className="agent-header"><div><strong>Synapse · 咪探长</strong><small>{context?.caseName || "全局助手 · 未选择案件"}</small></div><button onClick={close} aria-label="关闭助手"><X size={20} /></button></header>
+      <nav className="agent-nav" aria-label="咪探长功能">
+        <button type="button" aria-pressed={view === "chat"} onClick={() => setView("chat")}><MessageCircle size={17} />对话</button>
+        <button type="button" aria-pressed={view === "connection"} onClick={() => setView("connection")}><Cable size={17} />连接</button>
+        <button type="button" aria-pressed={view === "model"} onClick={() => setView("model")}><Settings size={17} />模型设置</button>
+      </nav>
+      {view === "connection" && <McpGuide onClose={() => setView("chat")} />}
+      {view === "model" && <section className="agent-settings" aria-label="模型连接设置">
+        <div className="agent-section-title"><h2>模型设置</h2><p>选择咪探长使用的模型，也可以先用本地演示。</p></div>
+        <label>连接方式<select aria-label="连接方式" value={mode} onChange={e => { testRequest.current?.abort(); setTesting(false); setMode(e.target.value as Mode); setProbe(""); }}><option value="server">使用已保存的模型</option><option value="custom">填写模型连接</option><option value="demo">本地演示 · 不调用模型</option></select></label>
+        {mode === "server" && <div className="agent-model-status"><span className={`agent-model-dot ${serverConfigured ? "ready" : ""}`} /><p>{server}</p>{!serverConfigured && <button type="button" onClick={() => { setMode("custom"); setProbe(""); }}>配置模型 →</button>}</div>}
+        {mode === "demo" && <p className="agent-model-status">对话仅检索示例和原始材料，不调用大模型。</p>}
         {mode === "custom" && <>
           <label>供应商<select aria-label="供应商" value={connection.provider} onChange={e => { const p = providers.find(p => p.id === e.target.value)!; update({ ...initialConnection, provider: p.id, protocol: p.protocol, baseUrl: p.baseUrl }); }}>{["国际旗舰", "国产大模型", "聚合 / 本地"].map(group => <optgroup key={group} label={group}>{providers.filter(p => p.group === group).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>)}</select></label>
-          <label>API 协议<select aria-label="API 协议" value={connection.protocol} onChange={e => changeProtocol(e.target.value as Protocol)}><option value="openai">OpenAI 兼容接口（含 Gemini）</option><option value="anthropic">Anthropic 接口</option><option value="responses">OpenAI Responses 接口</option></select></label>
-          <label>接口地址<input aria-label="API Base URL" value={connection.baseUrl} onChange={e => update({ ...connection, baseUrl: e.target.value })} placeholder="https://…/v1" autoComplete="off" /></label>
           <label>模型名称<input aria-label="模型 ID" value={connection.model} onChange={e => update({ ...connection, model: e.target.value })} placeholder="填写供应商控制台中的完整模型名称" autoComplete="off" /></label>
-          <label>访问密钥<input aria-label="API Key" type="password" value={connection.apiKey} onChange={e => update({ ...connection, apiKey: e.target.value })} placeholder={connection.provider === "ollama" ? "本地 Ollama 可留空" : "仅保留在本页内存中"} autoComplete="off" /></label>
-          <label className="agent-checkbox"><input type="checkbox" checked={connection.tools} onChange={e => update({ ...connection, tools: e.target.checked })} />允许助手检索本案材料</label>
-          <p>聚合平台不同模型可能使用不同协议；地域或套餐地址可修改。不支持工具的模型可关闭工具调用。密钥不会写入浏览器存储。</p>
+          <label>访问密钥（API Key）<input aria-label="API Key" type="password" value={connection.apiKey} onChange={e => update({ ...connection, apiKey: e.target.value })} placeholder={connection.provider === "ollama" ? "本地 Ollama 可留空" : "从模型供应商的控制台获取"} autoComplete="off" /></label>
+          <details className="agent-advanced"><summary>接口与高级选项</summary>
+            <label>API 协议<select aria-label="API 协议" value={connection.protocol} onChange={e => changeProtocol(e.target.value as Protocol)}><option value="openai">OpenAI 兼容接口（含 Gemini）</option><option value="anthropic">Anthropic 接口</option><option value="responses">OpenAI Responses 接口</option></select></label>
+            <label>接口地址<input aria-label="API Base URL" value={connection.baseUrl} onChange={e => update({ ...connection, baseUrl: e.target.value })} placeholder="https://…/v1" autoComplete="off" /></label>
+            <label className="agent-checkbox"><input type="checkbox" checked={connection.tools} onChange={e => update({ ...connection, tools: e.target.checked })} />允许助手检索本案材料</label>
+            <p>地址和协议已按供应商预填。不支持工具调用时，可关闭材料检索。</p>
+          </details>
         </>}
-        {mode !== "demo" && <button className="agent-test" disabled={testing} onClick={() => void test()}>{testing ? "测试中…" : "测试连接（一次模型调用）"}</button>}
-        {mode === "custom" && <><label>保存用途<select value={connectionRole} onChange={e=>setConnectionRole(e.target.value)}><option value="shared">默认共享</option><option value="chat">仅对话</option><option value="analysis">仅材料分析</option><option value="investigation">仅自主调查</option></select></label><button disabled={testing} onClick={() => void saveShared()}>测试并加密保存连接</button></>}
-        {probe && <p role="status">{probe}</p>}
+        {mode === "server" && serverConfigured && <button className="agent-test" disabled={testing} onClick={() => void test()}>{testing ? "测试中…" : "测试连接"}</button>}
+        {mode === "custom" && <><label>用于<select value={connectionRole} onChange={e=>setConnectionRole(e.target.value)}><option value="shared">对话、材料分析与调查</option><option value="chat">仅对话</option><option value="analysis">仅材料分析</option><option value="investigation">仅自主调查</option></select></label><button className="agent-test" disabled={testing || !connection.model.trim() || (connection.provider !== "ollama" && !connection.apiKey.trim())} onClick={() => void saveShared()}>{testing ? "验证并保存中…" : "验证并保存模型"}</button><p className="agent-settings-note">验证会调用模型。保存后，密钥加密存放在本机，不写入浏览器。</p></>}
+        {probe && <p className="agent-probe" role="status">{probe}</p>}
       </section>}
-      <ChatSession key={`${threadId}:${mode}:${connection.provider}:${connection.protocol}:${connection.model}:${connection.baseUrl}:${connection.tools}`} context={context} mode={mode} connection={connection} initialDraft={drafts[threadId] || ""} onDraft={draft => setDrafts(previous => ({ ...previous, [threadId]: draft }))} initialTurns={threads[threadId] || []} onTurns={turns => setThreads(previous => ({ ...previous, [threadId]: turns }))} />
+      <div className="agent-chat" hidden={view !== "chat"}><ChatSession key={`${threadId}:${mode}:${connection.provider}:${connection.protocol}:${connection.model}:${connection.baseUrl}:${connection.tools}`} context={context} mode={mode} connection={connection} initialDraft={drafts[threadId] || ""} onDraft={draft => setDrafts(previous => ({ ...previous, [threadId]: draft }))} initialTurns={threads[threadId] || []} onTurns={turns => setThreads(previous => ({ ...previous, [threadId]: turns }))} /></div>
     </aside>}
   </>;
 }
@@ -97,7 +107,7 @@ function ChatSession({ context, mode, connection, initialTurns, onTurns, initial
   const request = useRef<AbortController | null>(null);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => () => request.current?.abort(), []);
-  useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [turns, status]);
+  useEffect(() => { if (turns.length || status) end.current?.scrollIntoView({ block: "nearest" }); }, [turns, status]);
   function save(next: Turn[]) { setTurns(next); onTurns(next); }
   function stop() { request.current?.abort(); setBusy(false); setStatus(""); setError("已停止，问题已保留，可重新发送。"); }
   async function send(question = draft) {
@@ -131,7 +141,7 @@ function ChatSession({ context, mode, connection, initialTurns, onTurns, initial
     finally { if (!controller.signal.aborted) { setBusy(false); setStatus(""); } }
   }
   return <>
-    <div className="agent-scope"><span>{context ? `本案 ${context.evidence.length} 份材料` : "通用对话 · 不读取案件"} · {mode === "demo" ? "演示" : mode === "custom" ? connection.model || "未填写模型" : "服务端配置"}</span><button aria-label="清空当前对话" disabled={busy} onClick={() => { save([]); setError(""); }}><Trash2 size={14} /></button></div>
+    <div className="agent-scope"><span>{context ? `本案 ${context.evidence.length} 份材料` : "通用对话 · 不读取案件"} · {mode === "demo" ? "本地演示" : mode === "custom" ? connection.model || "未填写模型" : "已保存的模型"}</span><button aria-label="清空当前对话" disabled={busy} onClick={() => { save([]); setError(""); }}><Trash2 size={14} /></button></div>
     <div className="agent-messages" role="log" aria-label="对话记录">
       {!turns.length && <div className="agent-welcome"><h3>从一个问题开始。</h3><p>{context ? "输入问题，回复会保留材料来源。" : "创建案件后，可以就材料提问。"}</p>{(context ? ["这句话出自哪份材料？"] : ["我该怎么创建案件？", "可以导入哪些材料？"]).map(q => <button key={q} disabled={busy} onClick={() => { setDraft(q); void send(q); }}>{q}</button>)}</div>}
       {turns.map((turn, index) => <article key={index} className={`agent-message ${turn.role}`}><strong>{turn.role === "user" ? "你" : "咪探长"}</strong><p>{turn.content}</p>{turn.reply && <><small>{turn.reply.mode === "demo" ? "本地演示 · 非模型判断" : `模型回复 · ${turn.reply.model}`}</small>{turn.reply.citations.length > 0 && <div className="agent-citations">{turn.reply.citations.map(c => <button key={c.id} onClick={() => setSource(context?.evidence.find(e => e.id === c.evidenceId) ?? null)} title={c.excerpt}>[{c.id}] {c.name} ↗</button>)}</div>}<details><summary>来源与处理方式</summary><ul>{turn.reply.steps.map((s, i) => <li key={i}>{s}</li>)}</ul><p>引用表示读取过的来源，不代表事实已经核实。</p></details></>}</article>)}
