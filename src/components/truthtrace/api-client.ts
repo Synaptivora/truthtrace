@@ -12,7 +12,7 @@ export type ImportNotice = {
   skipped?: { title: string; reason: string }[]; // 范围内没消息 / 被全部取消勾选的会话
 };
 
-export type CaseAnalysis = { evidence: Evidence[]; analysis: AnalysisResult; caseName?: string; caseId?: string; reviewNotes?: Record<string, string>; notice?: ImportNotice };
+export type CaseAnalysis = { goal?: string; evidence: Evidence[]; analysis: AnalysisResult; caseName?: string; caseId?: string; reviewNotes?: Record<string, string>; notice?: ImportNotice };
 
 async function readReply(response: Response, fallback: string): Promise<Record<string, unknown>> {
   let value: unknown;

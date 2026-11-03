@@ -17,6 +17,7 @@ export function validateArtifact(t: Task, raw: unknown): Artifact {
     if(!s || !t.reads.includes(s.id) || (s.kind==="image"?!t.scope.allowImages:!s.content.includes(ref.quote))) throw new Error("引用必须来自本任务已读取的确切版本和原文片段");
   }
   const ids=new Set(claims.map(c=>c.id));
+  if(a.answer && (t.step!==7 || a.answer.claimIds.some(id=>!ids.has(id)||!t.artifacts.some(artifact=>artifact.checks.some(check=>check.claimId===id))))) throw new Error("回答必须引用已经独立核查的主张，并在报告阶段提交");
   for(const f of [...a.people,...a.relationships,...a.events,...a.conflicts,...a.commitments,...a.decisions]) if(f.claimIds.some(id=>!ids.has(id))) throw new Error("结果引用未知主张");
   for(const c of a.conflicts) if(c.claimIds.length<2 || !c.alternatives.length) throw new Error("潜在矛盾必须有至少两个主张和替代解释");
   for(const c of a.checks) if(!ids.has(c.claimId)||c.counterClaimIds.some(id=>!ids.has(id))) throw new Error("核验引用未知主张");
@@ -54,6 +55,8 @@ export function report(t:Task): string {
   const claims=artifacts.flatMap(a=>a.claims);
   const checks=artifacts.flatMap(a=>a.checks);
   const lines=[`# 调查报告草稿`, `调查目标：${t.goal}`, `调查方式：${investigationModes[t.mode || "deep"].label}`, `版本：${t.revision} · 模型辅助分析 · 最终判断由用户作出`, `模型：${t.model?`${t.model.provider} / ${t.model.name}`:"未调用"}`, "\n## 主张与核查"];
+  const answer=artifacts.findLast(a=>a.answer)?.answer;
+  if(answer)lines.push("\n## 对目标的回答",answer.text,`依据：[${answer.claimIds.join(", ")}]`);
   for(const c of claims) {
     const check=checks.find(x=>x.claimId===c.id);
     lines.push(`\n### ${c.id} ${c.content}`,`类型：${c.kind}；核查：${check?.status||"insufficient"}`,check?.reason||"尚未核查");

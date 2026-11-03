@@ -312,3 +312,5 @@
 .ci-chat-fail span { color: #e79c8d; font-size: 11.5px; line-height: 1.8; }
 .ci-chat-fail button { padding: 6px 14px; border: 1px solid #ac864955; border-radius: 8px; background: #ffffff06; color: #cbb894; font-size: 11px; cursor: pointer; }
 .ci-chat-fail button:hover { border-color: #d9a36477; color: #f0dcb6; }
+
+.ci-auth{padding:18px;margin:14px 0;border:1px solid #bda47a;border-radius:12px;background:#f7edda;color:#493c2e}.ci-auth a,.ci-auth button{display:inline-block;margin:8px 12px 0 0;padding:10px;background:#49382b;color:#fff0d1;border:1px solid #bda47a;border-radius:8px}.ci-sess-list>label:not(.ci-sess-row){display:block;padding:12px}.ci-sess-list input[type=text],.ci-sess-list input:not([type]){display:block;width:100%;margin-top:8px;padding:10px;border:1px solid #bda47a;border-radius:8px}

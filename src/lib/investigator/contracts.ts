@@ -21,6 +21,7 @@ export const ClaimSchema = z.object({ id: z.string().min(1), content: z.string()
 export const FindingSchema = z.object({ id: z.string().min(1), content: z.string().min(1), claimIds: z.array(z.string()).min(1), time: z.string().nullable().default(null), alternatives: z.array(z.string()).default([]) });
 export const ArtifactSchema = z.object({
   summary: z.string().max(12000),
+  answer: z.object({text:z.string().min(1).max(3000),claimIds:z.array(z.string()).min(1)}).optional(),
   plan: z.array(z.string()).default([]),
   claims: z.array(ClaimSchema).default([]),
   people: z.array(FindingSchema).default([]), relationships: z.array(FindingSchema).default([]),

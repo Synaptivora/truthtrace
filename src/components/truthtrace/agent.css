@@ -40,3 +40,14 @@
 :root[data-agent-text=large] .agent-panel{--agent-copy-size:16px;--agent-small-size:14px}
 :root[data-reduce-motion=true]{scroll-behavior:auto!important}:root[data-reduce-motion=true] *,:root[data-reduce-motion=true] *::before,:root[data-reduce-motion=true] *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:0s!important;scroll-behavior:auto!important}
 @media(max-width:550px){.agent-panel{left:8px;right:8px;bottom:76px;width:auto;max-width:none;height:calc(100dvh - 92px)}.agent-header{padding:15px 18px 12px}.agent-nav{padding:0 12px 12px}.agent-nav button{font-size:13px;min-height:38px}.agent-settings{padding:20px}.agent-launcher{right:12px;bottom:14px;padding:12px 16px}.agent-messages{padding:18px}.agent-compose{padding:12px 16px}.agent-compose>div>small{font-size:10px}.resume-analysis{left:12px;bottom:76px;max-width:calc(100vw - 24px)}.app-settings-trigger{left:12px;bottom:78px;padding:10px}.app-settings-panel{left:12px;bottom:130px;max-width:calc(100vw - 24px)}}
+.agent-view-investigation{width:620px}
+.agent-panel .investigator-embedded{position:relative;inset:auto;flex:1;min-height:0;width:100%;max-height:none;overflow-y:auto;border:0;border-radius:0;box-shadow:none;padding:20px}
+.agent-panel .investigator-embedded header{position:static;padding-top:0}
+.agent-route-note{padding:8px 20px;background:#eee2cc;font-size:11px}
+.agent-settings>button{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;margin:6px 6px 6px 0;border:1px solid #c8b18b;border-radius:9px;background:#fffaf0;color:#5c4428}
+.agent-panel .app-settings-inline{position:static;width:100%;max-width:none;max-height:none;padding:12px 0;border:0;box-shadow:none}
+.agent-settings>p{overflow-wrap:anywhere}
+.agent-nav{overflow-x:auto}.agent-nav button{flex-shrink:0}
+@media(max-width:550px){.agent-view-investigation{width:auto}.agent-panel .investigator-embedded{padding:16px}.agent-nav button{padding:7px;font-size:12px}.agent-route-note{display:none}}
+
+.agent-panel [hidden]{display:none!important}

@@ -28,7 +28,7 @@ try {
  await page.getByRole('button',{name:'和咪探长聊聊'}).click();
  await page.getByLabel('输入问题').fill('你好');await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByText('本地演示 · 非模型判断',{exact:true}).waitFor();
- await page.getByRole('button',{name:'模型设置',exact:true}).click();
+ await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'模型设置',exact:true}).click();
  await page.getByLabel('连接方式',{exact:true}).selectOption('custom');
  assert.equal(await page.getByLabel('供应商',{exact:true}).locator('option').count(),19);
  await page.getByLabel('供应商',{exact:true}).selectOption('custom');
@@ -46,7 +46,7 @@ try {
  await page.getByLabel('案件名称').fill('Agent 回归案件');
  await page.locator('#entryFiles').setInputFiles({name:'deposit.txt',mimeType:'text/plain',buffer:Buffer.from('小李：押金周一退还。')});
  await page.getByRole('button',{name:/开始整理/}).click();
- await page.getByRole('button',{name:'自主调查',exact:true}).waitFor({timeout:30000});
+ await page.locator('.contract-shell').waitFor({timeout:30000});
  await page.getByRole('button',{name:'和咪探长聊聊'}).click();
  await page.getByLabel('输入问题').fill('押金什么时候退还？');await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByRole('button',{name:'[E1] deposit.txt ↗',exact:true}).waitFor();
@@ -54,7 +54,7 @@ try {
  await page.locator('.agent-source pre').filter({hasText:'押金周一退还'}).waitFor();
  await page.getByRole('button',{name:'关闭引用原文',exact:true}).click();
  for(const protocol of ['anthropic','responses']){
-  await page.getByRole('button',{name:'模型设置',exact:true}).click();
+  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'模型设置',exact:true}).click();
   await page.getByText('接口与高级选项',{exact:true}).click();
   await page.getByLabel('API 协议',{exact:true}).selectOption(protocol);
   await page.getByRole('button',{name:'对话',exact:true}).click();

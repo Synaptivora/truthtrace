@@ -16,6 +16,21 @@ beforeEach(()=>{dir=mkdtempSync(join(tmpdir(),"truthtrace-test-"));vi.stubEnv("T
 afterEach(()=>{store.close();vi.unstubAllEnvs();rmSync(dir,{recursive:true,force:true});});
 const create=()=>store.createTask("case1",{goal:"核对退款",idempotencyKey:"one"});
 describe("investigator durability and provenance",()=>{
+  it("revises a running task atomically and rejects the old worker result",()=>{
+    const t=create();store.claim("old-worker");
+    store.saveCase({caseId:"case1",evidence:[evidence,{...evidence,id:"e2",content:"尚未到账"}],analysis});
+    const next=store.action(t.id,"revise");
+    expect(next.revision).toBe(2);expect(next.snapshot).toHaveLength(2);expect(next.state).toBe("queued");
+    expect(store.owned(t.id,"old-worker",task=>{task.step=8;})).toBe(false);
+  });
+  it("detects live worker heartbeats and expires stale workers",()=>{
+    expect(store.workerReady()).toBe(false);store.workerHeartbeat("worker");expect(store.workerReady()).toBe(true);
+    store.db.prepare("UPDATE worker_health SET updated=?").run(Date.now()-20000);expect(store.workerReady()).toBe(false);
+  });
+  it("rejects answers that cite unknown or unreviewed claims",()=>{
+    const t=create();t.step=7;
+    expect(()=>validateArtifact(t,{summary:"",answer:{text:"已退款",claimIds:["invented"]}})).toThrow("已经独立核查");
+  });
   it("recommends a route while keeping ambiguous goals and legacy tasks comprehensive",()=>{
     expect(suggestMode("核查有没有退款日期")).toBe("fact");
     expect(suggestMode("梳理事件时间线")).toBe("timeline");

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AnalysisResult, Evidence } from "@/lib/contracts";
 import { analyzeFiles, type CaseAnalysis } from "./truthtrace/api-client";
-import { InvestigatorPanel } from "./truthtrace/investigator-panel";
 import { ContractWorkbench } from "./truthtrace/contract-workbench";
 import { mountStudio } from "./truthtrace/runtime.mjs";
 import { AgentPanel, type AgentContext } from "./truthtrace/agent-panel";
@@ -25,9 +24,14 @@ const assets = {
 
 function Studio({ onAnalysisReady, onContext, cases, onOpenCase, onOpenChannel }: { onAnalysisReady: (result: CaseAnalysis) => void; onContext: (context: AgentContext | null) => void; cases: CaseAnalysis[]; onOpenCase: (id: string) => void; onOpenChannel: (channel: ChannelId) => void }) {
   const root = useRef<HTMLDivElement>(null);
+  const goalDraft = useRef("");
   useEffect(() => {
     if (!root.current) return;
-    return mountStudio(root.current, { assets, analyzeFiles, onAnalysisReady, onContext, cases, onOpenCase, onOpenChannel });
+    const element=root.current;
+    const dispose=mountStudio(element, { assets, analyzeFiles, onAnalysisReady, onContext, cases, onOpenCase, onOpenChannel });
+    const input=element.querySelector<HTMLTextAreaElement>("#entryGoal");
+    if(input)input.value=goalDraft.current;
+    return ()=>{goalDraft.current=element.querySelector<HTMLTextAreaElement>("#entryGoal")?.value??goalDraft.current;dispose();};
   }, [onAnalysisReady, onContext, cases, onOpenCase, onOpenChannel]);
   return <div ref={root} className="studio-host" aria-label="TruthTrace 案件工作空间" />;
 }
@@ -49,21 +53,34 @@ export function InvestigationWorkbench(_initialData: WorkbenchProps) {
   }, []);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [channel, setChannel] = useState<ChannelId | null>(null);
-  const openAnalysis = useCallback((value: CaseAnalysis) => {
-    const next = { ...value, caseId: value.caseId || crypto.randomUUID() };
+  const openAnalysis = useCallback(async (value: CaseAnalysis) => {
+    const previousCase=cases.find(item=>item.caseId===value.caseId);
+    const next = { ...value, goal:value.goal||previousCase?.goal, caseId: value.caseId || crypto.randomUUID() };
     setCases(previous => [...previous.filter(item => item.caseId !== next.caseId), next]);
     setActiveId(next.caseId);
-    fetch("/api/cases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) }).then(async r => {
+    await fetch("/api/cases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) }).then(async r => {
       const data = await r.json(); if (!r.ok) throw new Error(data.error || "保存失败");
       setCases(previous => previous.map(item => item.caseId === data.case.caseId ? data.case : item));
       setStorageError("");
-    }).catch(e => setStorageError(`案件尚未保存：${e.message}`));
-  }, []);
+      if(previousCase&&JSON.stringify(previousCase.evidence)!==JSON.stringify(data.case.evidence)) {
+        const tasks=await fetch(`/api/cases/${data.case.caseId}/investigations`).then(r=>r.json());
+        const task=tasks.tasks?.[0];
+        if(task&&task.state!=="cancelled") {
+          const service=await fetch("/api/assistant/service",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+          if(!service.ok)throw new Error("材料已保存，但调查服务暂不可用，请在助手中继续核查");
+          const revised=await fetch(`/api/investigations/${task.id}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"revise"})});
+          if(!revised.ok)throw new Error("材料已保存，自动继续失败，请在助手中加入新材料");
+        }
+      }
+    }).catch(e => {setStorageError(e.message);throw e;});
+  }, [cases]);
   const openCase = useCallback((id: string) => setActiveId(id), []);
-  const openChannel = useCallback((value: ChannelId) => setChannel(value), []);
+  const [channelTarget,setChannelTarget]=useState<CaseAnalysis|undefined>();
+  const [pendingGoal,setPendingGoal]=useState("");
+  const openChannel = useCallback((value:ChannelId,goal="")=>{setChannelTarget(cases.find(item=>item.caseId===activeId));setPendingGoal(goal);setChannel(value);},[cases,activeId]);
   const closeChannel = useCallback(() => setChannel(null), []);
-  const importedCase = useCallback((value: CaseAnalysis) => { setChannel(null); openAnalysis(value); }, [openAnalysis]);
+  const importedCase = useCallback(async (value: CaseAnalysis) => { await openAnalysis({...value,goal:value.goal||pendingGoal});setChannel(null);requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent("truthtrace:assistant",{detail:{view:"investigation"}}))); }, [openAnalysis,pendingGoal]);
   function goHome() { history.replaceState(null, "", "#home"); setSample(null); setActiveId(null); }
   const result = cases.find(item => item.caseId === activeId);
-  return <>{storageError && <p role="alert">{storageError}</p>}{result && <InvestigatorPanel key={`${result.caseId}-investigator`} context={result} />}{result ? <ContractWorkbench key={`${result.caseId}-workbench`} result={result} onHome={goHome} onUpdate={openAnalysis} /> : <Studio cases={cases} onOpenCase={openCase} onAnalysisReady={openAnalysis} onContext={onContext} onOpenChannel={openChannel} />}<AgentPanel context={result || sample} />{channel && <ChannelImport channel={channel} onClose={closeChannel} onReady={importedCase} />}</>;
+  return <>{storageError && <p role="alert">{storageError}</p>}{result ? <ContractWorkbench key={`${result.caseId}-workbench`} result={result} onHome={goHome} onUpdate={openAnalysis} /> : <Studio cases={cases} onOpenCase={openCase} onAnalysisReady={openAnalysis} onContext={onContext} onOpenChannel={openChannel} />}<AgentPanel context={result || sample} onReady={openAnalysis} onChannel={openChannel} />{channel && <ChannelImport key={channel} existing={channelTarget} goal={pendingGoal} channel={channel} onClose={closeChannel} onReady={importedCase} />}</>;
 }
