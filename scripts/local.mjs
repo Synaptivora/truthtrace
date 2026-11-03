@@ -55,7 +55,12 @@ const env = { ...process.env, ...envLocal, INGESTION_SERVICE_URL: INGESTION_URL 
 // 全局 npm 装不上时，setup.mjs 会把工具装到 ~/.synapse/tools/npm；
 // 把它的 .bin 加进 PATH，Python 的 shutil.which("dws") 才能找到。
 const toolsBin = join(homedir(), '.synapse', 'tools', 'npm', 'node_modules', '.bin');
-if (existsSync(toolsBin)) env.PATH = toolsBin + delimiter + (env.PATH || '');
+if (existsSync(toolsBin)) {
+  const pathKey = Object.keys(env).find(key => key.toLowerCase() === 'path') || 'PATH';
+  const searchPath = env[pathKey] || '';
+  for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') delete env[key];
+  env[pathKey] = toolsBin + delimiter + searchPath;
+}
 
 const children = [];
 
