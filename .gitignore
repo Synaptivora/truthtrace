@@ -19,3 +19,6 @@ services/ingestion/tests/_*/
 artifacts/
 
 .truthtrace/
+
+# 一键配置下载的第三方源码包缓存（离线复用，不入库）
+.tools/
