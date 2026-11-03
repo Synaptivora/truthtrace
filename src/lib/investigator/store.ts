@@ -106,3 +106,4 @@ export class Store {
   }
   close() {this.db.close();}
 }
+
