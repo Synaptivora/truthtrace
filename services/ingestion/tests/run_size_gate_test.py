@@ -20,6 +20,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -89,7 +90,7 @@ def post(path, timeout=120):
 
 
 def get(url):
-    with urllib.request.urlopen(url, timeout=30) as r:
+    with urllib.request.urlopen(urllib.parse.urljoin(BASE, url), timeout=30) as r:
         return r.status, r.read()
 
 
@@ -142,7 +143,7 @@ def main():
         check("标注「未解析」", "未解析" in c)
         check("写出文件大小", f"{big_size / 1024 / 1024:.1f} MB" in c, c.split("\n")[0][:60])
         check("写出原因（超过单份附件上限）", "超过单份附件上限" in c)
-        check("含下载链接", "下载链接：http://" in c)
+        check("含下载链接", "下载链接：/files/" in c)
         check("提示不要猜测内容", "不要猜测" in c)
         check("name 保留原文件名", ev["name"] == "合同扫描件.pdf", ev["name"])
         check("响应很快（未解析）", dt < 3, f"{dt:.2f}s")
@@ -165,13 +166,13 @@ def main():
         print("\n=== 4) 各种文档类型一视同仁（docx 也走同一道闸门）===")
         ev = post(p_big_docx)
         check("docx 超限同样不解析", ev["kind"] == "text" and "未解析" in ev["content"])
-        check("docx 也带链接", "下载链接：http://" in ev["content"])
+        check("docx 也带链接", "下载链接：/files/" in ev["content"])
 
         print("\n=== 5) 远超阈值也是 200 + 链接（全程没有 413）===")
         try:
             ev = post(p_huge)
             check("HTTP 200，不拒收", True, f"kind={ev['kind']}")
-            check("仍然给链接", "下载链接：http://" in ev["content"])
+            check("仍然给链接", "下载链接：/files/" in ev["content"])
             check("仍然说清超限", "超过单份附件上限" in ev["content"])
         except urllib.error.HTTPError as e:
             check("HTTP 200，不拒收", False, f"status={e.code}")
@@ -198,3 +199,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
