@@ -219,7 +219,10 @@ def capture_account_key(
     session = None
     attached_pid: int | None = None
     last_error: Exception | None = None
-    subprocess.Popen([str(executable)], close_fds=True)
+    subprocess.Popen(
+        [str(executable)], close_fds=True,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
     while time.monotonic() < deadline and session is None:
         pid = _main_wechat_pid()
         if pid is None:

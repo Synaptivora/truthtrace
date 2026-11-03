@@ -87,7 +87,7 @@ def main() -> int:
         print(f"    [{step}/{total}] {label}", flush=True)
 
     key = capture.capture_account_key(account.account_dir, progress=progress)
-    print(f"[✓] 密钥 {len(key)} 字节 | {key[:4].hex()}…{key[-4:].hex()}", flush=True)
+    print(f"[✓] 数据库读取凭据验证成功（{len(key)} 字节，内容不显示）", flush=True)
     if cache:
         print(f"[✓] 缓存已写入：{cache()}（存在={cache().is_file()}）", flush=True)
     else:

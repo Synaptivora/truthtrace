@@ -69,6 +69,7 @@ def _src_candidates() -> list[Path]:
         out.append(Path(env).expanduser())
     out += [
         adapters / "wechat-ai-memory" / "src",
+        Path.home() / ".synapse" / "tools" / "wechat-ai-memory-main" / "src",
         here.parent / "wechat-ai-memory" / "src",
         Path.home() / "wam_probe" / "src" / "wechat-ai-memory-main" / "src",
     ]
