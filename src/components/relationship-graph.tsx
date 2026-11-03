@@ -111,7 +111,7 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
   return (
     <div ref={canvas} className="graph-canvas" aria-label="人物与材料关系图">
       <div className="graph-toolbar"><label>关注人物<select aria-label="关注人物" value={personId||""} onChange={e=>{setPersonId(e.target.value||null);setRelationshipId(null);}}><option value="">全部人物</option>{analysis.people.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select></label><label><input type="checkbox" checked={showSources} onChange={e=>setShowSources(e.target.checked)}/>显示材料连线</label><details><summary>互动清单 · {relationships.length}</summary>{relationships.length?relationships.map(r=><button key={r.id} onClick={()=>{setPersonId(null);setRelationshipId(r.id);}}>{analysis.people.find(p=>p.id===r.sourcePersonId)?.name} → {analysis.people.find(p=>p.id===r.targetPersonId)?.name}：{r.label}</button>):<p>尚无足够依据连接人物。同群出现不代表实际关系，可用模型进一步分析。</p>}</details></div>
-      <ReactFlow ariaLabelConfig={{ "controls.ariaLabel": "画布控制", "controls.zoomIn.ariaLabel": "放大关系图", "controls.zoomOut.ariaLabel": "缩小关系图", "controls.fitView.ariaLabel": "适应画布" }} onNodeClick={(_, node) => { if (analysis.people.some(p => p.id === node.id)){setPersonId(node.id);setRelationshipId(null);} }} onEdgeClick={(_,edge)=>{if(relationships.some(r=>r.id===edge.id)){setRelationshipId(edge.id);setPersonId(null);}}} onPaneClick={() => {setPersonId(null);setRelationshipId(null);}} nodes={nodes} edges={edges} onInit={instance => { flow.current = instance; }} fitView minZoom={0.2} maxZoom={1.8} proOptions={{ hideAttribution: false }}>
+      <ReactFlow key={analysis.generatedAt} ariaLabelConfig={{ "controls.ariaLabel": "画布控制", "controls.zoomIn.ariaLabel": "放大关系图", "controls.zoomOut.ariaLabel": "缩小关系图", "controls.fitView.ariaLabel": "适应画布" }} onNodeClick={(_, node) => { if (analysis.people.some(p => p.id === node.id)){setPersonId(node.id);setRelationshipId(null);} }} onEdgeClick={(_,edge)=>{if(relationships.some(r=>r.id===edge.id)){setRelationshipId(edge.id);setPersonId(null);}}} onPaneClick={() => {setPersonId(null);setRelationshipId(null);}} nodes={nodes} edges={edges} onInit={instance => { flow.current = instance; }} fitView minZoom={0.2} maxZoom={1.8} proOptions={{ hideAttribution: false }}>
         <Background color="#a77f47" gap={27} size={1} />
         <Controls showInteractive={false} />
       </ReactFlow>
@@ -120,3 +120,4 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
     </div>
   );
 }
+
