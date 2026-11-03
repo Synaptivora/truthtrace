@@ -42,11 +42,11 @@ try {
  await page.getByLabel('输入问题').fill('你好模型');await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByText('你好，这是测试模型回复。',{exact:true}).waitFor();
  await page.getByRole('button',{name:'关闭助手',exact:true}).click();
- await page.getByRole('button',{name:'创建案件',exact:true}).click();
+ await page.locator('[data-entry=new]').first().click();
  await page.getByLabel('案件名称').fill('Agent 回归案件');
  await page.locator('#entryFiles').setInputFiles({name:'deposit.txt',mimeType:'text/plain',buffer:Buffer.from('小李：押金周一退还。')});
  await page.getByRole('button',{name:/开始整理/}).click();
- await page.getByRole('button',{name:/进入调查工作台/}).click({timeout:30000});
+ await page.getByRole('button',{name:'自主调查',exact:true}).waitFor({timeout:30000});
  await page.getByRole('button',{name:'和咪探长聊聊'}).click();
  await page.getByLabel('输入问题').fill('押金什么时候退还？');await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByRole('button',{name:'[E1] deposit.txt ↗',exact:true}).waitFor();
@@ -75,3 +75,4 @@ try {
  assert(!storage.includes('browser-test-secret'));assert.equal(errors.length,0,errors.join('\n'));
  console.log(JSON.stringify({pass:true,protocols:['openai','anthropic','responses'],requests:requests.length,consoleErrors:errors}));
 } catch(error) { await page.screenshot({path:output+'/failure.png',fullPage:true}); throw error; } finally {await browser.close();server.closeAllConnections();server.close();}
+
