@@ -48,6 +48,7 @@ try{
   assert.deepEqual(liveBody.conversations.map(c=>c.id),['selected']);assert.deepEqual(extractBody.conversation_ids,['selected']);
   const cases=(await (await fetch(base+'/api/cases')).json()).cases;assert.equal(cases[0].goal,'核查钉钉里的退款承诺');assert.equal(cases[0].evidence.length,1);
   await page.getByLabel('调查目标',{exact:true}).fill('核查退款承诺及到账日期');
+  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'本次调查',exact:true}).click();assert.equal(await page.getByLabel('调查目标',{exact:true}).inputValue(),'核查退款承诺及到账日期');
   await page.getByRole('button',{name:'连接模型并继续',exact:true}).click();await page.getByRole('heading',{name:'模型设置',exact:true}).waitFor();await page.getByRole('button',{name:'返回并继续',exact:true}).click();
   assert.equal(await page.getByLabel('调查目标',{exact:true}).inputValue(),'核查退款承诺及到账日期');
   await mkdir('artifacts/journey',{recursive:true});await page.screenshot({path:'artifacts/journey/desktop.png'});await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/journey/mobile.png'});
