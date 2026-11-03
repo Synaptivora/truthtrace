@@ -1,4 +1,5 @@
 import { EvidenceSchema, type Evidence } from "../contracts";
+import { ingestionUrl } from "./service";
 
 // 聊天信封走 /parse_chat 时没有体积闸门，上限只在 B 这一侧守；
 // 超了就退回 /parse，让 A 的单条路径去处理（含超限说明）。
@@ -134,7 +135,7 @@ async function parseChatRemotely(bundle: ChatBundle, serviceUrl: string): Promis
 export async function parseEvidenceFile(file: File): Promise<Evidence[]> {
   if (file.size === 0) throw new Error(`${file.name} 是空文件`);
 
-  const serviceUrl = process.env.INGESTION_SERVICE_URL;
+  const serviceUrl = process.env.INGESTION_SERVICE_URL || (/\.(pdf|json)$/i.test(file.name)?ingestionUrl():undefined);
   if (serviceUrl) {
     const bundles = await chatBundles(file);
     if (bundles) {

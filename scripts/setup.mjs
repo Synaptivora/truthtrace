@@ -16,10 +16,10 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, copyFileSync, statSync } from 'node:fs';
 import { tmpdir, homedir, platform } from 'node:os';
-import { dirname, join, resolve, basename } from 'node:path';
+import { join, resolve, basename, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = resolve(/* turbopackIgnore: true */ process.cwd());
 const HOME = homedir();
 const IS_WIN = platform() === 'win32';
 const PYTHON = process.env.SYNAPSE_PYTHON || (IS_WIN ? 'python' : 'python3');
@@ -45,6 +45,15 @@ const PY_DEPS = [
   ['zstandard', 'zstandard'], ['pycryptodome', 'Crypto'],
 ];
 
+export function toolEnvironment(extra = {}) {
+  const env={...process.env,...readEnvLocal(),...extra,PYTHONUTF8:'1'};
+  const pathKey=Object.keys(env).find(key=>key.toLowerCase()==='path')||'PATH';
+  const searchPath=env[pathKey]||'';
+  for(const key of Object.keys(env))if(key.toLowerCase()==='path')delete env[key];
+  env[pathKey]=NPM_LOCAL_BIN+delimiter+searchPath;
+  return env;
+}
+
 // ---------------------------------------------------------------- 进程封装
 
 function quote(arg) {
@@ -54,7 +63,7 @@ function quote(arg) {
 
 /** 统一走 shell，兼容 Windows 上 npm.cmd / dws.cmd 这类批处理入口。 */
 function run(command, args = [], options = {}) {
-  const { timeout = 120_000, onLine, cwd = ROOT, env = process.env } = options;
+  const { timeout = 120_000, onLine, cwd = ROOT, env = toolEnvironment() } = options;
   const line = [command, ...args.map(quote)].join(' ');
   return new Promise(resolvePromise => {
     let done = false;
@@ -96,7 +105,7 @@ async function quick(command, args = [], options = {}) {
 }
 
 function tmpScript(contents, name = 'synapse_setup_probe.py') {
-  const path = join(tmpdir(), name);
+  const path = join(/* turbopackIgnore: true */ tmpdir(), name);
   writeFileSync(path, contents, 'utf-8');
   return path;
 }
@@ -106,8 +115,8 @@ function tmpScript(contents, name = 'synapse_setup_probe.py') {
 export function readEnvLocal() {
   const path = join(ROOT, '.env.local');
   const out = {};
-  if (!existsSync(path)) return out;
-  for (const line of readFileSync(path, 'utf-8').split(/\r?\n/)) {
+  if (!existsSync(/* turbopackIgnore: true */ path)) return out;
+  for (const line of readFileSync(/* turbopackIgnore: true */ path, 'utf-8').split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/i);
     if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '');
   }
@@ -117,7 +126,7 @@ export function readEnvLocal() {
 /** 写 .env.local：保留用户已有的每一行，只补缺失的键（幂等、不覆盖手填的 Key）。 */
 export function writeEnvLocal(updates) {
   const path = join(ROOT, '.env.local');
-  const original = existsSync(path) ? readFileSync(path, 'utf-8') : '';
+  const original = existsSync(/* turbopackIgnore: true */ path) ? readFileSync(/* turbopackIgnore: true */ path, 'utf-8') : '';
   const lines = original.split(/\r?\n/);
   const present = new Set(
     lines.map(l => (l.match(/^\s*([A-Z0-9_]+)\s*=/i) || [])[1]).filter(Boolean),
@@ -175,19 +184,19 @@ export function keyCachePath() {
 function keyCacheInfo() {
   const path = keyCachePath();
   let accounts = 0;
-  if (existsSync(path)) {
-    try { accounts = Object.keys(JSON.parse(readFileSync(path, 'utf-8')).keys || {}).length; }
+  if (existsSync(/* turbopackIgnore: true */ path)) {
+    try { accounts = Object.keys(JSON.parse(readFileSync(/* turbopackIgnore: true */ path, 'utf-8')).keys || {}).length; }
     catch { /* 文件损坏就当没有，下一步会提示重新抓密钥 */ }
   }
-  return { path, exists: existsSync(path), accounts };
+  return { path, exists: existsSync(/* turbopackIgnore: true */ path), accounts };
 }
 
 function localZips() {
   const dirs = [join(HOME, 'wam_probe'), join(HOME, 'Downloads'), join(ROOT, '.tools')];
   const found = [];
   for (const dir of dirs) {
-    if (!existsSync(dir)) continue;
-    for (const name of readdirSync(dir)) {
+    if (!existsSync(/* turbopackIgnore: true */ dir)) continue;
+    for (const name of readdirSync(/* turbopackIgnore: true */ dir)) {
       if (/wechat-ai-memory.*\.zip$/i.test(name)) found.push(join(dir, name));
     }
   }
@@ -453,7 +462,11 @@ export async function runSetup(onStep = () => {}) {
 
 /** 钉钉设备流登录：把 URL / user_code 回显到前端，用户点开完成授权。 */
 export async function actionDingtalkLogin(onLine = () => {}) {
-  const result = await run('dws', ['auth', 'login', '--device', '--no-browser'], {
+  const installed=await quick('dws',['--version']);
+  if(!installed.ok){onLine('正在准备钉钉连接工具…');await ensureNpmGlobal(DWS_PKG,'dws',onLine);}
+  const before=await quick('dws',['auth','status','--format','json']);
+  try{const status=JSON.parse(before.out.slice(before.out.indexOf('{')));if(status.authenticated&&status.token_valid)return {ok:true,output:'',note:'钉钉已连接，无需重复扫码'};}catch{/* Continue to device authorization. */}
+  const result = await run('dws', ['auth', 'login', '--device', '--no-browser', '--recommend'], {
     timeout: 240_000, onLine,
   });
   const auth = await quick('dws', ['auth', 'status', '-f', 'json'], { timeout: 20_000 });

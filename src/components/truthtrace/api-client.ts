@@ -82,12 +82,14 @@ export async function analyzeFiles(files: File[], signal: AbortSignal, onParsed:
   const kept = combined.slice(0, MAX_ANALYZE_EVIDENCE);
   const analysisReply = await readReply(await fetch("/api/analyze", {
     method: "POST", signal, headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ evidence: kept }),
+    body: JSON.stringify({ evidence: kept,allowFallback:true }),
   }), "分析失败，请稍后重试。");
   const result = AnalysisResultSchema.safeParse(analysisReply.analysis);
   if (!result.success) throw new Error("分析结果未通过格式校验，请重试。");
 
   const notice: ImportNotice = {};
+  const modelFailure=(analysisReply.meta as {analysisError?:string}|undefined)?.analysisError;
+  if(modelFailure)notice.note=`材料已保留，模型分析尚未完成：${modelFailure}`;
   const truncatedChars = truncatedFromMeta(analysisReply);
   if (truncatedChars) notice.truncatedChars = truncatedChars;
   const dropped = droppedFromMeta(analysisReply);

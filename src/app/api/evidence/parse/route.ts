@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseEvidenceFile } from "@/lib/ingestion/parser";
 import { saveOriginal } from "@/lib/investigator/store";
+import { ensureIngestion } from "@/lib/ingestion/service";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
     }
 
     const evidence = [];
+    if((process.env.INGESTION_SERVICE_URL||files.some(file=>/\.(pdf|json)$/i.test(file.name)))&&["localhost","127.0.0.1","[::1]"].includes(new URL(request.url).hostname))await ensureIngestion();
     for (const file of files) {
       // 聊天信封会展开成「chat + 媒体」多条，普通文件仍是 1 条
       const parsed=await parseEvidenceFile(file);

@@ -774,8 +774,8 @@ export function ChannelImport({
       setBusy("analyze");
       const analysed = await postJson<{
         analysis?: unknown;
-        meta?: { truncated?: number; droppedEvidence?: number; droppedImages?: number };
-      }>("/api/analyze", { evidence });
+        meta?: { truncated?: number; droppedEvidence?: number; droppedImages?: number;analysisError?:string };
+      }>("/api/analyze", { evidence,allowFallback:true });
       const analysis = AnalysisResultSchema.parse(analysed.analysis);
       document.body.classList.remove("case-entry");
       // 这些提示不能只 setNotice：成功后会立刻 onReady → 关弹层，用户根本看不到。
@@ -784,6 +784,7 @@ export function ChannelImport({
       if (typeof extracted.synced === "number") notice.synced = extracted.synced;
       if (extracted.truncated) notice.truncated = true;
       if (extracted.note) notice.note = extracted.note;
+      if(analysed.meta?.analysisError)notice.note=`${notice.note||""} 材料已保留，模型分析尚未完成：${analysed.meta.analysisError}`;
       if (extracted.skipped?.length) notice.skipped = extracted.skipped;
       if (analysed.meta?.truncated) notice.truncatedChars = analysed.meta.truncated;
       if (analysed.meta?.droppedEvidence) notice.droppedEvidence = analysed.meta.droppedEvidence;

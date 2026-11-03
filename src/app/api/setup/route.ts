@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureIngestion } from "@/lib/ingestion/service";
 import {
   actionCaptureWechatKey,
   actionDingtalkLogin,
@@ -35,9 +36,9 @@ function localOnly(request: Request): boolean {
     const url = new URL(request.url);
     const host = new URL(`http://${request.headers.get("host") || ""}`).hostname;
     if (!["localhost", "127.0.0.1", "[::1]"].includes(host)) return false;
-    if (url.host !== request.headers.get("host")) return false;
     const origin = request.headers.get("origin");
-    if (origin && origin !== url.origin) return false;
+    // Next may internally rewrite 127.0.0.1 to localhost; compare browser Origin to Host.
+    if (origin && origin !== `${url.protocol}//${request.headers.get("host")}`) return false;
     return request.headers.get("sec-fetch-site") !== "cross-site";
   } catch { return false; }
 }
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
   }
   const body = await request.json().catch(() => null);
   const action = body && typeof body === "object" ? body.action : undefined;
-  if (!["install", "login-dingtalk", "capture-wechat-key"].includes(action)) {
+  if (!["install", "login-dingtalk", "capture-wechat-key", "start-services"].includes(action)) {
     return NextResponse.json({ error: `未知操作 ${action}` }, { status: 400 });
   }
   for (const job of jobs.values()) {
@@ -99,7 +100,9 @@ export async function POST(request: Request) {
   // 任务异步跑，POST 立即返回 jobId，前端轮询 GET 拿进度。
   void (async () => {
     try {
-      if (action === "install") {
+      if (action === "start-services") {
+        await ensureIngestion();job.status="ok";job.ok=true;job.note="材料服务已就绪";
+      } else if (action === "install") {
         const report = await runSetup(step => {
           if (typeof step.log === "string") {
             job.lines.push(step.log);
@@ -112,6 +115,7 @@ export async function POST(request: Request) {
         job.note = failed ? "部分步骤失败，请查看日志" : "配置完成，可刷新渠道状态";
         job.ok = !failed;
       } else {
+        job.lines.push("正在准备材料读取服务…");await ensureIngestion();job.lines.push("材料读取服务已就绪");
         const result = action === "login-dingtalk"
           ? await actionDingtalkLogin(line => job.lines.push(line))
           : await actionCaptureWechatKey(line => job.lines.push(line));

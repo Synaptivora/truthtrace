@@ -122,3 +122,8 @@
 .contract-investigation>header,.contract-investigation nav { flex-wrap:wrap; }
 .view-tabs button:nth-child(3) { display:inline-flex; }
 @media(max-width:700px) { .view-tabs button { min-height:34px; font-size:12px; padding:7px 9px; } }
+
+.graph-toolbar{position:absolute;z-index:12;top:8px;left:8px;max-width:calc(100% - 16px);display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;background:#f7edda;color:#503820;border:1px solid #b78d53;border-radius:8px;font-size:12px}.graph-toolbar label{display:flex;gap:5px;align-items:center}.graph-toolbar select{max-width:150px}.graph-toolbar details[open]{flex-basis:100%;max-height:180px;overflow:auto}.graph-toolbar details button{display:block;text-align:left;padding:7px;background:none;color:inherit;border:0}.graph-person-peek{top:82px}.graph-person-peek blockquote{margin:10px 0;padding:8px;background:#fff8e8;font-size:12px;white-space:pre-wrap}.ci-auth>img{display:block;margin:12px auto}.ci-auth small{display:block;margin-top:10px}
+
+
+.graph-canvas .react-flow__edge-text{stroke:none;font-weight:600}.graph-toolbar select{background:#fff8e8;color:#503820;border:1px solid #b78d53;padding:4px;border-radius:4px}.graph-person-peek blockquote+button{background:#f7edda;color:#70451f;border:1px solid #b78d53;padding:6px;border-radius:4px}

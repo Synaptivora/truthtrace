@@ -31,13 +31,14 @@ export const ConnectionSchema = z.object({
 });
 export type Connection = z.infer<typeof ConnectionSchema>;
 export function serverConnection(): Connection | null {
-  if ((process.env.AGENT_PROVIDER ?? process.env.AI_PROVIDER ?? "mock") === "mock") return null;
-  const preset = providers.find(p => p.id === process.env.AGENT_PROVIDER);
+  const provider=process.env.AGENT_PROVIDER ?? process.env.AI_PROVIDER ?? (process.env.AGENT_API_KEY||process.env.AI_API_KEY?"openai":"mock");
+  if (["mock","rule"].includes(provider) || provider==="auto"&&!process.env.AGENT_API_KEY&&!process.env.AI_API_KEY) return null;
+  const preset = providers.find(p => p.id === provider);
   return ConnectionSchema.parse({
-    provider: process.env.AGENT_PROVIDER ?? "openai",
+    provider: preset?.id ?? "openai",
     protocol: process.env.AGENT_PROTOCOL ?? preset?.protocol ?? "openai",
-    baseUrl: process.env.AGENT_BASE_URL ?? preset?.baseUrl ?? process.env.AI_BASE_URL ?? "https://api.openai.com/v1",
-    model: process.env.AGENT_MODEL ?? process.env.AI_MODEL,
+    baseUrl: process.env.AGENT_BASE_URL ?? process.env.AI_BASE_URL ?? preset?.baseUrl ?? "https://api.openai.com/v1",
+    model: process.env.AGENT_MODEL ?? process.env.AI_MODEL ?? (provider==="deepseek"?"deepseek-flash":undefined),
     apiKey: process.env.AGENT_API_KEY ?? process.env.AI_API_KEY ?? "",
     tools: process.env.AGENT_TOOLS !== "false",
   });

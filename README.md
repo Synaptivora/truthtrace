@@ -1,30 +1,28 @@
 # TruthTrace
 上传聊天记录、截图和文件，AI 识别人物、还原事件、追踪承诺，并标出证据之间值得核查的差异，且每一条结论都可点回原始证据。
-## 运行
+## 本机运行与模型连接
+
+需要 Node.js 22.13+（推荐 24）和 Python 3。首次运行：
 
 ```bash
 npm install
-npm run dev
+npm run build
+npm run start:local
 ```
 
-打开 `http://localhost:3000`。默认 `AI_PROVIDER=mock`，无需密钥即可跑通完整演示（虚构校园退款纠纷）。
+打开 `http://127.0.0.1:3000`。开发可用 `npm run dev:local`；只启动 `npm run dev` 时，钉钉连接按钮也会自动准备本机解析服务。缺失 Python 时页面会说明原因，安装 Python 后重试。启动不会先阻塞安装微信、飞书等无关渠道；完整依赖安装可单独运行 `npm run setup`。
 
-## 启用真实多模态模型
+助手 → 设置 → 模型设置 → 填写模型连接，选择 DeepSeek 时会预填官方地址与 `deepseek-flash`，填入自己的密钥后点击「连接并保存模型」。保存会验证文本与工具调用；Windows 下密钥经 DPAPI 保护后加密存于本机 `.truthtrace`。临时连接测试不等于保存，不能用于后台材料分析。其他系统使用 `AGENT_*` 环境变量配置。
 
-复制 `.env.example` 为 `.env.local`：
+共享连接用于对话、材料分析与调查；没有模型时仅做明确标注的规则统计，不能当作语义分析。模型失败时导入流程保留材料并显示原因。已有案件点击「用模型分析已有材料」即可重新生成关系与时间线，不必重新导入，旧分析保存在本机历史表。
 
-```bash
-AI_PROVIDER=openai
-AI_API_KEY=你的密钥
-AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-4.1-mini
-```
+钉钉：选择渠道 → 连接钉钉。系统自动准备读取服务和 CLI，已有有效授权会直接继续；未授权则显示官方设备授权二维码和链接，用户用钉钉扫码确认。之后按联系人/群名选择会话。微信使用不同的本机接入机制，不能承诺仅扫码即可完成。
 
-模型输出会先经过 `src/lib/ai/validate.ts` 校验：引用不存在的证据或人物会被服务端拒绝，防止凭空编造来源。
+当前自动材料分析以文本为主；未参与分析的图片会明确标出。调查/对话的原图发送仍需用户勾选授权。模型通过原文编号引用，程序还原逐字引文并验证引用；语义判断仍需要结合上下文复核。
 
-## A 接入解析服务
+## GitHub Pages 与完整应用
 
-设置 `INGESTION_SERVICE_URL` 指向独立的证据解析服务；该服务需响应 `POST /parse`（`multipart/form-data`，字段 `file`），返回 `{ evidence: {...} }`，结构见 `src/lib/contracts.ts` 的 `EvidenceSchema`。未设置时内置解析器仅支持文本与图片转 base64。
+完整应用依赖 Next.js API、SQLite、Python 解析服务和本机授权，不能用静态托管替代。`npm run build` 保留服务端 API。`node scripts/build-static.mjs` 只生成项目说明页，不移动源码、不删除 `.next`、不伪装在线 Agent。Pages 展示页不会接收密钥或聊天。部署完整服务需要可持续运行 Node/Python 的环境；访问本机钉钉仍需本机服务。
 
 ## 脚本
 

@@ -56,6 +56,7 @@ export interface ActionResult {
 }
 
 export function detect(): Promise<SetupDetect>;
+export function toolEnvironment(extra?: Record<string,string>): NodeJS.ProcessEnv;
 export function readEnvLocal(): Record<string, string>;
 export function writeEnvLocal(
   updates: Record<string, string>,

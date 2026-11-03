@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ingestionUrl } from "@/lib/ingestion/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,7 +8,7 @@ export const maxDuration = 240;
 // B 侧桥接：把 C 的 /api/source/* 转发到 A 的 /source/*（方案 A 冻结契约）。
 // 只转发，不做体积/字段判断；A 的 /source/* 返回什么就原样回传。
 function baseUrl(): string {
-  return (process.env.INGESTION_SERVICE_URL || "").replace(/\/$/, "");
+  return ingestionUrl();
 }
 
 function unavailable() {
@@ -33,7 +34,7 @@ export async function GET(request: Request, context: { params: Promise<{ path: s
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     return NextResponse.json(
-      { error: "无法连接 A 解析服务", detail: error instanceof Error ? error.message : String(error) },
+      { error: "材料读取服务未运行，请点击「连接钉钉」自动启动并检查授权", detail: error instanceof Error ? error.message : String(error) },
       { status: 502 },
     );
   }
@@ -58,7 +59,7 @@ export async function POST(request: Request, context: { params: Promise<{ path: 
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     return NextResponse.json(
-      { error: "无法连接 A 解析服务", detail: error instanceof Error ? error.message : String(error) },
+      { error: "材料读取服务不可用，请重新连接渠道；已保存材料不会丢失", detail: error instanceof Error ? error.message : String(error) },
       { status: 502 },
     );
   }

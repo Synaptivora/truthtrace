@@ -34,6 +34,7 @@ export function wireRequest(config: Connection, messages: Message[], tools: Tool
   }
   return { path: "/chat/completions", headers: { Authorization: `Bearer ${config.apiKey || "ollama"}`, ...(config.provider === "mimo" ? { "api-key": config.apiKey } : {}) }, body: {
     model: config.model,
+    ...(config.provider === "deepseek" ? { thinking: { type: "disabled" }, max_tokens: 12000 } : {}),
     messages: messages.map(m => m.role === "tool" ? { role: "tool", tool_call_id: m.callId, content: m.content } : m.raw ?? { role: m.role, content: m.image ? [{ type: "text", text: m.content }, { type: "image_url", image_url: { url: m.image } }] : m.content }),
     ...(tools.length ? { tools: tools.map(t => ({ type: "function", function: t })) } : {}),
   } };
@@ -62,7 +63,7 @@ export async function modelStep(config: Connection, messages: Message[], tools: 
   const response = await fetch(config.baseUrl + wire.path, { method: "POST", redirect: "error", headers: { "Content-Type": "application/json", ...wire.headers }, body: JSON.stringify(wire.body), signal });
   if (!response.ok) {
     // Do not expose upstream bodies: some providers echo credentials or evidence.
-    const hints: Record<number, string> = { 401: "API Key 无效或与地域不匹配", 403: "账号无权调用该模型", 404: "模型名称、协议或 API 地址不正确", 429: "额度不足或请求过于频繁", 400: "请求不兼容：请检查协议、模型及工具调用支持" };
+    const hints: Record<number, string> = { 401: "API Key 无效或与地域不匹配", 402: "账户余额不足，请在模型供应商控制台充值", 403: "账号无权调用该模型", 404: "模型名称、协议或 API 地址不正确", 429: "请求过于频繁或额度受限，请稍后重试", 400: "请求不兼容：请检查协议、模型及工具调用支持" };
     throw new Error(`模型服务 HTTP ${response.status}：${hints[response.status] ?? "服务暂时不可用，请稍后重试"}`);
   }
   return parseStep(config.protocol, await response.json());

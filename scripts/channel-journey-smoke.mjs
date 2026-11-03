@@ -22,7 +22,7 @@ try{
   await page.route('**/api/source/status?*',route=>fulfill(route,{source:'dingtalk',authorized,status:authorized?'ready':'need_auth'}));
   await page.route('**/api/setup*',route=>{
     if(route.request().method()==='POST')return fulfill(route,{jobId:'fixture-auth'});
-    polls++;if(polls>1)authorized=true;
+    polls++;if(polls>2)authorized=true;
     return fulfill(route,{status:authorized?'ok':'running',ok:authorized,lines:['https://login.dingtalk.com/oauth2/device/verify.htm?user_code=TEST'],steps:[]});
   });
   await page.route('**/api/source/sessions',route=>{scans++;return fulfill(route,{sessions:[{id:'selected',title:'项目群',count:1},{id:'other',title:'无关群',count:5}]});});
@@ -36,7 +36,7 @@ try{
   await page.getByRole('button',{name:'交给咪探长',exact:true}).click();
   await page.getByRole('button',{name:'选择钉钉会话',exact:true}).click();
   await page.getByRole('button',{name:'连接钉钉',exact:true}).click();
-  await page.getByRole('link',{name:'打开钉钉授权页 ↗',exact:true}).waitFor();
+  await page.getByRole('link',{name:'打开钉钉授权页 ↗',exact:true}).waitFor();await page.getByAltText('钉钉官方授权二维码').waitFor();assert.match(await page.getByAltText('钉钉官方授权二维码').getAttribute('src'),/^data:image\/png;base64,/);
   await page.getByLabel('搜索联系人或群名').waitFor({timeout:15000});
   assert.equal(scans,1);assert.equal(await page.locator('.ci-sess-row input:checked').count(),0);
   await page.getByLabel('搜索联系人或群名').fill('项目');assert.equal(await page.locator('.ci-sess-row').count(),1);

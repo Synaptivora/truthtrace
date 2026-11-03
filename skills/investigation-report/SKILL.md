@@ -13,6 +13,7 @@ case_overview、list_evidence、search_evidence、read_evidence、get_evidence_c
 
 # 流程
 核对目标覆盖情况，整理具体缺失材料、获取建议和未决定事项。decisions.question 必须问一个具体事实或选择，例如“这两处小王是同一个人吗？”，不要要求用户笼统采纳整份结论。报告正文由程序从主张及核查结果生成，不在summary写新的案件事实。
+能基于现有原文回答用户问题时，直接给出有限结论并结束。普通信息缺口放入 gaps，不强迫用户补齐身份、正式文件或场外信息；只有会阻止当前目标继续、且确实需要用户作选择的事项才填写 decisions。不要把先前分析中的推断重复包装成确定事实；核查为 disputed/insufficient 的内容要说明不确定，不能写“原文自相矛盾”。优先呈现对用户有用的明确答复，再简述边界。
 
 # 输出
 使用 finalize_investigation 提交并校验本阶段成果，主要填写 answer,gaps,decisions。answer 用简洁中文直接回答用户目标，claimIds 必须引用已独立核查的主张；不得将“某人说过”写成“实际发生”。证据不足要明确指出，不得写超出依据的结论。没有可核查主张时省略 answer；其他字段按schema留空。summary仅记录操作和限制。不得新增无出处的事实。

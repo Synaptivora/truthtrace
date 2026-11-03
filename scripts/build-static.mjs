@@ -1,59 +1,9 @@
-// 静态导出构建脚本（GitHub Pages 用）
-// 原理：Next.js 静态导出(output: export)与 API 路由(force-dynamic)不兼容，
-// 且 tests/ 会引用 API 模块导致类型检查失败。构建前临时移出这两处，
-// 构建完成后恢复。源码目录保持干净。
-import { renameSync, existsSync, rmSync } from "node:fs";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const apiDir = join(root, "src", "app", "api");
-const testsDir = join(root, "tests");
-const nextDir = join(root, ".next");
-const apiBackup = join(root, ".api-static-export-backup");
-const testsBackup = join(root, ".tests-static-export-backup");
-
-let exitCode = 0;
-
-function run(cmd, args) {
-  console.log(`\n$ ${cmd} ${args.join(" ")}`);
-  const r = spawnSync(cmd, args, { cwd: root, stdio: "inherit", shell: true });
-  if (r.status !== 0) {
-    console.error(`\n[build-static] 命令失败: ${cmd} ${args.join(" ")}`);
-    exitCode = r.status ?? 1;
-  }
-}
-
-// 0. 清理 .next 缓存（避免旧的类型校验器引用已移出的 API 模块）
-if (existsSync(nextDir)) {
-  rmSync(nextDir, { recursive: true, force: true });
-  console.log("[build-static] 已清理 .next 缓存");
-}
-
-// 1. 移出 API 目录与 tests 目录
-if (existsSync(apiDir)) {
-  renameSync(apiDir, apiBackup);
-  console.log("[build-static] 已临时移出 src/app/api");
-}
-if (existsSync(testsDir)) {
-  renameSync(testsDir, testsBackup);
-  console.log("[build-static] 已临时移出 tests");
-}
-
-// 2. 执行静态构建（不立即退出，保证 finally 能恢复目录）
-try {
-  run("npx", ["next", "build"]);
-} finally {
-  // 3. 无论成败都恢复目录
-  if (existsSync(apiBackup)) {
-    renameSync(apiBackup, apiDir);
-    console.log("[build-static] 已恢复 src/app/api");
-  }
-  if (existsSync(testsBackup)) {
-    renameSync(testsBackup, testsDir);
-    console.log("[build-static] 已恢复 tests");
-  }
-}
-
-process.exit(exitCode);
+// GitHub Pages hosts project information only. Never move API source or destroy the local build.
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+const output=fileURLToPath(new URL('../out/',import.meta.url));
+mkdirSync(output,{recursive:true});
+writeFileSync(output+'/index.html',`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TruthTrace · 启动工作台</title><style>body{max-width:760px;margin:8vh auto;padding:24px;font:18px/1.8 system-ui;background:#f7edda;color:#503820}h1{font-size:42px}pre{padding:20px;background:#fff9ed;border:1px solid #b78d53;overflow:auto}a{color:#854a23}small{display:block;margin-top:32px}</style><h1>TruthTrace</h1><p>把聊天记录整理为有原文依据的人物互动、时间线与调查结果。</p><h2>完整工作台在本机运行</h2><p>此页为项目说明。GitHub Pages 不运行模型 API、案件数据库、Python 解析服务或钉钉授权。请下载项目，在本机启动：</p><pre>npm install
+npm run build
+npm run start:local</pre><p>然后打开 <a href="http://127.0.0.1:3000">本地工作台</a>。在助手设置中连接模型；导入钉钉时点击连接，按官方页面扫码授权。</p><p><a href="https://github.com/Synaptivora/truthtrace">查看源码与使用说明</a></p><small>密钥保存在本机；此展示页不接收聊天记录或 API Key。</small></html>`,'utf8');
+console.log('Project page generated in out; API source and .next left intact.');

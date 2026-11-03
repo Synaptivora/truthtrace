@@ -20,7 +20,7 @@ import { validateAnalysis } from "./validate";
  *
  * 它做什么（只做能从文本里确定性推出的事）：
  *   - 发言人列表 → 人物（含发言条数、活跃区间、代表原话）
- *   - 同一段会话里的共现 → 关系（"同群沟通"，附共现次数）
+ *   - 明确 @ 提及 → 关系（不把同群发言当作互动）
  *   - 按时间断点切分对话 → 事件
  *   - 「我会/明天/负责…」句式 → 承诺
  *
@@ -45,15 +45,6 @@ const SELF = /^(我|本人)$/;
 /** 单条消息里的期限线索，用来给「承诺」标一个可读的 dueLabel */
 const DUE_RE = /(今天|今晚|明天|后天|本周[一二三四五六日天]?|下周[一二三四五六日天]?|周[一二三四五六日天]|(\d{1,2})月(\d{1,2})[日号]|(\d{1,2})[点:：]\d{0,2}|月底|周末|尽快|稍后)/;
 const TASK_RE = /(我(?:来|会|们)?|本人).{0,10}(会|来|负责|安排|处理|提交|发|确认|联系|整理|统计|通知|交|完成)|(负责|安排|提交|截止|务必|记得|需要)|(明天|今天|今晚|下周|本周|月底|之前).{0,12}(交|发|提交|完成|确认|给)/;
-/**
- * 角色只按「这个人自己说了什么」判断，不看别人提到他什么。
- * ——早先的写法里任何消息提到「老师」就把他标成老师，结果一屋子学生全是老师。
- */
-const ROLE_RULES: Array<[RegExp, string]> = [
-  [/(我(来|会)?(负责|安排|组织|统计|汇总|通知|收集|联系)|大家|同学们|请各位|各位)/, "组织者"],
-  [/(转账|付款|已转|定金|尾款|收款|报销)/, "款项相关方"],
-  [/(报名|参加|签到|提交|截止)/, "参与方"],
-];
 
 function clean(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -101,13 +92,6 @@ function parseLines(evidence: Evidence[]): Line[] {
   return lines.sort((a, b) => a.at - b.at);
 }
 
-function roleOf(texts: string[]): string {
-  const joined = texts.join(" ");
-  for (const [pattern, role] of ROLE_RULES) {
-    if (pattern.test(joined)) return role;
-  }
-  return "参与人";
-}
 
 function buildPeople(lines: Line[]): { people: Person[]; byName: Map<string, Person> } {
   const buckets = new Map<string, Line[]>();
@@ -129,7 +113,7 @@ function buildPeople(lines: Line[]): { people: Person[]; byName: Map<string, Per
     return {
       id: `rule-person-${index + 1}`,
       name,
-      role: roleOf(texts),
+      role: "发言人",
       aliases: [],
       summary: `发言 ${items.length} 条（${timeLabel(first.time)} → ${timeLabel(last.time)}）${
         samples.length ? `；代表原话：「${samples[0].slice(0, 60)}」` : ""
@@ -142,49 +126,21 @@ function buildPeople(lines: Line[]): { people: Person[]; byName: Map<string, Per
 }
 
 function buildRelationships(lines: Line[], byName: Map<string, Person>): Relationship[] {
-  const weights = new Map<string, { count: number; refs: EvidenceRef[] }>();
-  const byEvidence = new Map<string, Line[]>();
-  for (const line of lines) {
-    if (!byName.has(line.sender)) continue;
-    const list = byEvidence.get(line.evidenceId);
-    if (list) list.push(line);
-    else byEvidence.set(line.evidenceId, [line]);
-  }
-  for (const group of byEvidence.values()) {
-    // 只统计「同一段会话内」的共现：跨案件的两个人不该因为同一天发言就被连线
-    const seen = [...new Set(group.map(item => item.sender))].filter(name => byName.has(name));
-    for (let i = 0; i < seen.length; i += 1) {
-      for (let j = i + 1; j < seen.length; j += 1) {
-        const [left, right] = [seen[i], seen[j]].sort();
-        const key = `${left}\u0000${right}`;
-        const current = weights.get(key) || { count: 0, refs: [] };
-        const first = group.find(item => item.sender === left);
-        const second = group.find(item => item.sender === right);
-        if (first && second) {
-          current.count += 1;
-          if (current.refs.length < 2) {
-            current.refs.push(ref(first.evidenceId, first.raw));
-            if (current.refs.length < 2) current.refs.push(ref(second.evidenceId, second.raw));
-          }
-        }
-        weights.set(key, current);
-      }
+  const relations=new Map<string,Relationship>();
+  for(const line of lines) {
+    const source=byName.get(line.sender);if(!source)continue;
+    for(const [name,target] of byName) {
+      if(source.id===target.id)continue;
+      const at=line.text.indexOf(`@${name}`);if(at<0)continue;
+      const next=line.text[at+name.length+1];
+      if(next&&!/[\s，。！？,:：;；]/.test(next))continue;
+      const key=`${source.id}:${target.id}`;
+      const old=relations.get(key);
+      if(old){if(old.evidenceRefs.length<3)old.evidenceRefs.push(ref(line.evidenceId,line.raw));}
+      else relations.set(key,{id:`rule-rel-${relations.size+1}`,sourcePersonId:source.id,targetPersonId:target.id,label:"明确提及（@）",evidenceRefs:[ref(line.evidenceId,line.raw)]});
     }
   }
-  return [...weights.entries()]
-    .filter(([, value]) => value.refs.length > 0)
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 12)
-    .map(([key, value], index) => {
-      const [left, right] = key.split("\u0000");
-      return {
-        id: `rule-rel-${index + 1}`,
-        sourcePersonId: byName.get(left)!.id,
-        targetPersonId: byName.get(right)!.id,
-        label: `同一会话沟通 ${value.count} 次`,
-        evidenceRefs: value.refs,
-      };
-    });
+  return [...relations.values()];
 }
 
 function buildEvents(lines: Line[], byName: Map<string, Person>): TimelineEvent[] {
@@ -311,7 +267,7 @@ export function createRuleAnalysis(evidence: Evidence[]): AnalysisResult {
     {
       caseTitle: title,
       summary: lines.length
-        ? `本地规则识别：${chatCount} 段对话、${lines.length} 条消息中识别出 ${people.length} 位发言人、${relationships.length} 段共现关系、${events.length} 个时间片段。未启用语义模型，以上仅为发言人与时间的确定性统计，需结合原文核对。`
+        ? `本地规则识别：${chatCount} 段对话、${lines.length} 条消息中识别出 ${people.length} 位发言人、${relationships.length} 条明确提及关系、${events.length} 个时间片段。未启用语义模型，以上仅为发言人与时间的确定性统计，需结合原文核对。`
         : `本地规则识别：${evidence.length} 份材料中未找到「[时间] 发言人：内容」格式的对话行，暂无人物可列。`,
       people,
       relationships,
