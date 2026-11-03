@@ -86,7 +86,7 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
             <p>地址和协议已按供应商预填。不支持工具调用时，可关闭材料检索。</p>
           </details>
         </>}
-        {mode === "server" && serverConfigured && <button className="agent-test" disabled={testing} onClick={() => void test()}>{testing ? "测试中…" : "测试连接"}</button>}
+        {(mode === "custom" || (mode === "server" && serverConfigured)) && <button className="agent-test" disabled={testing} onClick={() => void test()}>{testing ? "测试中…" : "测试连接（一次模型调用）"}</button>}
         {mode === "custom" && <><label>用于<select value={connectionRole} onChange={e=>setConnectionRole(e.target.value)}><option value="shared">对话、材料分析与调查</option><option value="chat">仅对话</option><option value="analysis">仅材料分析</option><option value="investigation">仅自主调查</option></select></label><button className="agent-test" disabled={testing || !connection.model.trim() || (connection.provider !== "ollama" && !connection.apiKey.trim())} onClick={() => void saveShared()}>{testing ? "验证并保存中…" : "验证并保存模型"}</button><p className="agent-settings-note">验证会调用模型。保存后，密钥加密存放在本机，不写入浏览器。</p></>}
         {probe && <p className="agent-probe" role="status">{probe}</p>}
       </section>}
@@ -152,3 +152,4 @@ function ChatSession({ context, mode, connection, initialTurns, onTurns, initial
     {source && <section className="agent-source" aria-label="引用原文"><header><strong>{source.name}</strong><button onClick={() => setSource(null)} aria-label="关闭引用原文"><X size={18} /></button></header>{source.kind === "image" ? <Image src={source.content} alt={source.name} width={800} height={600} unoptimized style={{width:"100%",height:"auto"}} /> : <pre>{source.content}</pre>}</section>}
   </>;
 }
+
