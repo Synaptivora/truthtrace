@@ -291,7 +291,8 @@ async function ensurePythonDeps(missing, onLine) {
     `mods = ${JSON.stringify(PY_DEPS)}\n` +
     'print(",".join(name for name, mod in mods if importlib.util.find_spec(mod) is None))\n',
   )]);
-  const still = after.ok ? after.out.split(',').filter(Boolean) : [];
+  if (!after.ok) return { status: 'failed', detail: `Python 依赖复检失败：${after.out.slice(-300)}` };
+  const still = after.out.split(',').filter(Boolean);
   if (still.length) return { status: 'failed', detail: `仍缺依赖：${still.join(', ')}；${result.output.slice(-300)}` };
   return { status: 'ok', detail: 'Python 依赖安装完成' };
 }
