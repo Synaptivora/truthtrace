@@ -32,12 +32,13 @@ try {
  await page.getByLabel('连接方式',{exact:true}).selectOption('custom');
  assert.equal(await page.getByLabel('供应商',{exact:true}).locator('option').count(),19);
  await page.getByLabel('供应商',{exact:true}).selectOption('custom');
+ await page.getByText('接口与高级选项',{exact:true}).click();
  await page.getByLabel('API Base URL',{exact:true}).fill('http://127.0.0.1:18765/v1');
  await page.getByLabel('模型 ID',{exact:true}).fill('fixture');
  await page.getByLabel('API Key',{exact:true}).fill('browser-test-secret');
  await page.getByRole('button',{name:'测试连接（一次模型调用）',exact:true}).click();
  await page.getByText(/连接成功：fixture/).waitFor();
- await page.getByRole('button',{name:'模型设置',exact:true}).click();
+ await page.getByRole('button',{name:'对话',exact:true}).click();
  await page.getByLabel('输入问题').fill('你好模型');await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByText('你好，这是测试模型回复。',{exact:true}).waitFor();
  await page.getByRole('button',{name:'关闭助手',exact:true}).click();
@@ -54,8 +55,9 @@ try {
  await page.getByRole('button',{name:'关闭引用原文',exact:true}).click();
  for(const protocol of ['anthropic','responses']){
   await page.getByRole('button',{name:'模型设置',exact:true}).click();
+  await page.getByText('接口与高级选项',{exact:true}).click();
   await page.getByLabel('API 协议',{exact:true}).selectOption(protocol);
-  await page.getByRole('button',{name:'模型设置',exact:true}).click();
+  await page.getByRole('button',{name:'对话',exact:true}).click();
   await page.getByLabel('输入问题').fill('再核对一下退还时间 '+protocol);
   await page.getByRole('button',{name:'发送',exact:true}).click();
   await page.waitForFunction(()=>!document.querySelector('.agent-progress'));
