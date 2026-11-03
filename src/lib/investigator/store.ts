@@ -4,7 +4,7 @@ import { resolve, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { AnalysisResultSchema, EvidenceSchema, type Evidence } from "../contracts";
 import { z } from "zod";
-import { TaskInputSchema, type Task, type Segment } from "./contracts";
+import { TaskInputSchema, taskStages, type Task, type Segment } from "./contracts";
 
 export const CaseSchema = z.object({ caseId: z.string().min(1).default(() => randomUUID()), caseName: z.string().optional(), evidence: z.array(EvidenceSchema), analysis: AnalysisResultSchema, reviewNotes: z.record(z.string(), z.string()).optional(), notice: z.record(z.string(), z.unknown()).optional() });
 export type SavedCase = z.infer<typeof CaseSchema>;
@@ -68,7 +68,7 @@ export class Store {
       const existing = this.db.prepare("SELECT id FROM tasks WHERE case_id=? AND idem=?").get(caseId,data.idempotencyKey) as {id:string}|undefined;
       if(existing) return this.task(existing.id);
       if(this.tasks(caseId).some(t=>["queued","running","waiting_user","paused"].includes(t.state))) throw new Error("本案已有未结束调查，请先继续或取消该任务");
-      const task: Task = {id:randomUUID(),caseId,goal:data.goal,scope:data.scope,state:"queued",step:0,revision:1,modelCalls:0,toolCalls:0,activeMs:0,error:"",snapshot:this.snapshot(caseId),artifacts:[],reads:[],decisions:[],createdAt:new Date().toISOString(),lease:0,owner:""};
+      const task: Task = {id:randomUUID(),caseId,goal:data.goal,mode:data.mode,scope:data.scope,state:"queued",step:0,revision:1,modelCalls:0,toolCalls:0,activeMs:0,error:"",snapshot:this.snapshot(caseId),artifacts:[],reads:[],decisions:[],createdAt:new Date().toISOString(),lease:0,owner:""};
       this.db.prepare("INSERT INTO tasks VALUES(?,?,?,?,?,?,?)").run(task.id,caseId,data.idempotencyKey,task.state,0,"",JSON.stringify(task));
       this.event(task.id,{type:"created"}); return task;
     });
@@ -98,7 +98,8 @@ export class Store {
     });
   }
   decision(id:string,decision:{id:string;value:string;reason:string}) {
-    return this.transaction(()=>{const t=this.task(id);if(t.state==="running")throw new Error("请先暂停调查，再提交判断");if(!t.artifacts.some(a=>a.decisions.some(d=>d.id===decision.id))) throw new Error("决定项不存在"); t.decisions.push({...decision,at:new Date().toISOString()});t.artifacts=t.artifacts.slice(0,3);t.step=3;t.revision++;t.state="queued";t.owner="";t.lease=0; this.saveTask(t); this.event(id,{type:"decision",...decision}); return t;});
+    return this.transaction(()=>{const t=this.task(id);if(t.state==="running")throw new Error("请先暂停调查，再提交判断");if(!t.artifacts.some(a=>a.decisions.some(d=>d.id===decision.id))) throw new Error("决定项不存在"); t.decisions.push({...decision,at:new Date().toISOString()});t.artifacts=t.artifacts.slice(0,3);t.step=taskStages(t.mode).find(stage=>stage>=3)!;t.revision++;t.state="queued";t.owner="";t.lease=0; this.saveTask(t); this.event(id,{type:"decision",...decision}); return t;});
   }
   close() {this.db.close();}
 }
+
