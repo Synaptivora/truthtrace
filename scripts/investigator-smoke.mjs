@@ -35,13 +35,20 @@ try{
   const saved=await fetch(base+'/api/cases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caseId:'smoke-case',caseName:'虚构退款测试',analysis,evidence:[{id:'e1',name:'虚构聊天',kind:'text',mimeType:'text/plain',content:'小王说周五退款。'}]})});assert.equal(saved.status,200);
   browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base);await page.locator('[data-entry-case="smoke-case"]').click();
-  await page.getByRole('button',{name:'自主调查',exact:true}).click();await page.getByLabel('调查目标',{exact:true}).fill('核实退款承诺和实际到账');await page.getByRole('button',{name:'开始调查',exact:true}).click();
+  await page.getByRole('button',{name:'自主调查',exact:true}).click();await page.getByLabel('调查目标',{exact:true}).fill('核实退款承诺和实际到账');await page.getByLabel('调查方式',{exact:true}).selectOption('deep');await page.getByRole('button',{name:'开始调查',exact:true}).click();
   await page.getByRole('heading',{name:'报告已生成 · 8/8'}).waitFor({timeout:15000});
   await page.getByRole('button',{name:'查看原文：周五退款'}).click();await page.locator('.investigator-panel pre').getByText('小王说周五退款。',{exact:true}).waitFor();
   const tasks=await (await fetch(base+'/api/cases/smoke-case/investigations')).json();const report=await (await fetch(base+`/api/investigations/${tasks.tasks[0].id}/report`)).text();assert.match(report,/e1 v1/);
-  await mkdir('artifacts/investigator',{recursive:true});await page.screenshot({path:'artifacts/investigator/desktop.png'});
+  await mkdir('artifacts/investigator',{recursive:true});await page.locator('.investigator-panel').evaluate(el=>el.scrollTop=0);await page.screenshot({path:'artifacts/investigator/desktop.png'});
   await page.reload();await page.locator('[data-entry-case="smoke-case"]').click();await page.getByRole('button',{name:'自主调查',exact:true}).click();await page.getByRole('heading',{name:'报告已生成 · 8/8'}).waitFor();
-  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/investigator/mobile.png'});const bounds=await page.locator('.investigator-panel').boundingBox();assert(bounds.x>=0&&bounds.x+bounds.width<=390);assert.deepEqual(errors,[]);
+  await page.getByText('调整目标或开始下一次调查',{exact:true}).click();
+  await page.getByLabel('调查目标',{exact:true}).fill('核查是否有明确的退款日期');
+  await page.getByLabel('调查方式',{exact:true}).selectOption('auto');
+  await page.getByRole('button',{name:'开始调查',exact:true}).click();
+  await page.getByRole('heading',{name:'报告已生成 · 5/5'}).waitFor({timeout:15000});
+  assert.equal(await page.locator('.investigator-steps li').count(),5);
+  await page.getByText('结果已整理，还有待补充的依据',{exact:true}).waitFor();
+  await page.setViewportSize({width:390,height:844});await page.locator('.investigator-panel').evaluate(el=>el.scrollTop=0);await page.screenshot({path:'artifacts/investigator/mobile.png'});const bounds=await page.locator('.investigator-panel').boundingBox();assert(bounds.x>=0&&bounds.x+bounds.width<=390);assert.deepEqual(errors,[]);
   console.log('PASS: eight skills, worker, persistent case/task, refresh, report references, desktop and 390px UI. Fixture model only.');
 }catch(e){console.error(logs);console.error(await page?.locator("body").innerText());throw e;}
 finally{await browser?.close();app.kill();worker.kill();model.close();console.log('Isolated test data:',dir);}
