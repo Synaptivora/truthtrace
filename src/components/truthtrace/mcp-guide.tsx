@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Cable, Check, Copy, QrCode, RefreshCw, Terminal } from "lucide-react";
 import type { Evidence } from "@/lib/contracts";
+import { SetupTools } from "./setup-tools";
 
 type SourceItem = {
   id: string;
@@ -55,28 +56,28 @@ const STATUS_LABEL: Record<string, string> = {
 
 const GUIDES: Record<string, { intro: string; steps: Step[] }> = {
   dingtalk: {
-    intro: "使用钉钉 dws 工具连接，首次需要本人扫码授权。",
+    intro: "通过钉钉官方 dws CLI（OAuth 只读）取数。A 只做探测，扫码授权必须你手动完成。",
     steps: [
-      { label: "安装并确认 dws", cmd: "dws --version", note: "建议 v1.0.39 及以上" },
-      { label: "扫码登录", cmd: "dws auth login", note: "登录后返回这里，点击检测连接。" },
+      { label: "安装并确认 dws", cmd: "npm i -g dingtalk-workspace-cli && dws --version", note: "官方包 dingtalk-workspace-cli，bin 名为 dws；建议 v1.0.39 及以上" },
+      { label: "扫码授权登录", cmd: "dws auth login", note: "以 dws auth status -f json 确认 authenticated 且 token_valid" },
       {
-        label: "按时间范围导出（可选）",
+        label: "按时间窗取数（同步时会用到）",
         cmd: 'dws chat message list-all --start "2026-10-01 00:00:00" --end "2026-11-01 23:59:59" --limit 200 -f json',
       },
-      { label: "导出登录凭证（可选）", cmd: "dws auth export" },
+      { label: "演示机可导出/导入凭证，省去现场扫码", cmd: "dws auth export" },
     ],
   },
   wechat: {
-    intro: "支持 Windows 本机微信。首次配置会重启微信并获取数据库密钥，之后使用缓存。",
+    intro: "仅 Windows。需先关闭微信 → 扫码 → 抓取 SQLCipher 密钥（只做一次，之后走缓存）。A 不做 OCR，图片/文件保留原图原件。",
     steps: [
-      { label: "首次抓取密钥（会重启微信一次）", cmd: "python -m adapters.wechat_key_cache import" },
-      { label: "校验密钥是否有效", cmd: "python wechat_key_cache.py --verify" },
+      { label: "首次抓取密钥（会重启微信一次，需手机确认）", cmd: "python scripts/prime_wechat_key.py", note: "或直接点上方「抓取微信密钥」按钮" },
+      { label: "校验密钥是否有效", cmd: "python services/ingestion/adapters/wechat_key_cache.py --verify" },
       { label: "缓存位置（可用 SYNAPSE_WECHAT_KEY_CACHE 覆盖）", note: "%LOCALAPPDATA%\\Synapse\\wechat_db_keys.json" },
-      { label: "已有导出文件？", note: "在读取选项中填写文件路径，再同步材料。" },
+      { label: "导出 JSON 后，填下方「导出文件绝对路径」再同步", note: "A 会归一化为 1 条 chat + N 条媒体证据" },
     ],
   },
   feishu: {
-    intro: "通过 lark-cli 登录个人账号后读取会话；仅有机器人授权时无法读取个人聊天。",
+    intro: "通过 lark-cli 授权取数。探测会读 lark-cli 的 bot / user 两种身份：只有 bot 身份调得动租户 API，读不到个人会话，必须补一次 user 登录。",
     steps: [{ label: "安装并授权", cmd: "lark-cli auth login", note: "授权后 `lark-cli auth status` 里 user 身份应为 ready" }],
   },
   mock: {
@@ -84,6 +85,13 @@ const GUIDES: Record<string, { intro: string; steps: Step[] }> = {
     steps: [{ label: "直接点击「同步取数」即可", note: "无需 goal 与导出文件" }],
   },
 };
+
+const ENDPOINTS: Array<[string, string, string]> = [
+  ["GET", "/source/list", "渠道列表"],
+  ["GET", "/source/status?source=…", "授权状态"],
+  ["POST", "/source/connect", "探测 / 触发授权"],
+  ["POST", "/source/sync", "AI 精准取数 → evidences[]"],
+];
 
 export function McpGuide({ onClose }: { onClose: () => void }) {
   const [sources, setSources] = useState<SourceItem[]>([]);
@@ -220,19 +228,44 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
   const guide = GUIDES[selected] || GUIDES.mock;
   const currentStatus = status?.status || "";
   const evidences = result?.evidences || [];
-  const message = notice || status?.error || "";
-  const serviceUnavailable = /INGESTION_SERVICE_URL|未配置.*解析服务|无法连接.*解析服务/.test(message);
+  // 服务没起来时，状态探测和渠道列表会拿到同一条错误；顶部 notice 已显示，卡片里不重复
+  const probeFailed = currentStatus === "error";
+  const dupError = Boolean(status?.error) && status?.error === notice;
 
   return (
-    <section className="mcp-guide" aria-label="聊天来源连接">
+    <section className="mcp-guide" aria-label="数据源 MCP 配置">
       <header className="mcp-head">
         <button onClick={onClose} aria-label="返回对话"><ArrowLeft size={18} /></button>
-        <div><strong>聊天来源</strong><small>连接与授权</small></div>
+        <div><strong>数据源 MCP 配置</strong><small>A → C 渠道工具接入</small></div>
       </header>
 
       <div className="mcp-body">
+        <p className="mcp-lead">
+          把微信 / 钉钉 / 飞书的取数工具接到这里。A 端已冻结的 <code>/source/*</code> 接口已通过 <code>/api/source/*</code> 在本界面接通。
+          下面的「已就绪 / 待授权」是 A 端现场探测的结果（<code>dws auth status</code>、真开一次微信库、<code>lark-cli auth status</code>），
+          不是写死的演示状态；点「检测连接」会强制重新探一次。
+        </p>
+
+        {notice && <p className="mcp-notice" role="status">{notice}</p>}
+
+        <SetupTools onDone={() => void loadList()} />
+
         <div className="mcp-channels">
-          {sources.length === 0 && !listError && <span className="mcp-empty">正在检测聊天来源…</span>}
+          {sources.length === 0 && !listError && (
+            <>
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="mcp-channel-skeleton" aria-hidden="true">
+                  <span className="sk-dot" />
+                  <span className="sk-lines"><i /><i /></span>
+                  <span className="sk-badge" />
+                </div>
+              ))}
+              <span className="mcp-empty" role="status">正在现场探测渠道（dws auth status、开一次微信库、lark-cli auth status，三路并行），约 1~2 秒…</span>
+            </>
+          )}
+          {sources.length === 0 && listError && (
+            <button type="button" className="mcp-retry" onClick={() => void loadList()}>渠道列表没读出来，重试</button>
+          )}
           {sources.map(item => (
             <button
               key={item.id}
@@ -253,25 +286,28 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        {(status || message) && (
+        {status && (
           <div className="mcp-status" data-status={currentStatus}>
             <div className="mcp-status-row">
-              {currentStatus !== "error" && !serviceUnavailable && <span className={`mcp-badge ${status?.authorized ? "ok" : "warn"}`}>{status?.authorized ? "已授权" : "待授权"}</span>}
-              <span className="mcp-status-text">{serviceUnavailable ? "接入服务未连接" : STATUS_LABEL[currentStatus] || "连接提示"}</span>
-              {status?.count !== undefined && status.count > 0 && (
+              {probeFailed
+                ? <span className="mcp-badge err">连接异常</span>
+                : <span className={`mcp-badge ${status.authorized ? "ok" : "warn"}`}>{status.authorized ? "已授权" : "未授权"}</span>}
+              <span className="mcp-status-text">{probeFailed ? "状态探测失败" : STATUS_LABEL[currentStatus] || currentStatus || "未知"}</span>
+              {status.count !== undefined && status.count > 0 && (
                 <span className="mcp-count">最近一次 {status.count} 条</span>
               )}
-              {status?.checked_at && <span className="mcp-count mcp-checked">检测于 {status.checked_at}</span>}
+              {status.checked_at && <span className="mcp-count mcp-checked">检测于 {status.checked_at}</span>}
             </div>
-            {serviceUnavailable ? <p className="mcp-detail">启动本机接入服务后，点击检测连接。</p> : status?.detail && status.detail !== message && <p className="mcp-detail">{status.detail}</p>}
-            {(status?.last_action || (status?.last_sync && (status.count ?? 0) > 0)) && (
+            {status.detail && <p className="mcp-detail">{status.detail}</p>}
+            {(status.last_action || (status.last_sync && (status.count ?? 0) > 0)) && (
               <p className="mcp-detail">
                 最近一次取数：{status.last_action || `${status.count} 条`}
                 {status.last_sync ? ` · ${status.last_sync.slice(5, 16)}` : ""}
               </p>
             )}
-            {message && (serviceUnavailable ? <details className="mcp-diagnostic"><summary>查看配置说明</summary><p>{message}</p></details> : <p className="mcp-detail error" role="status">{message}</p>)}
-            {status?.action && (
+            {status.error && !dupError && <p className="mcp-detail error">{status.error}</p>}
+            {status.error && dupError && <p className="mcp-detail">原因同上，修复后点「检测连接」重试。</p>}
+            {status.action && (
               <div className="mcp-action">
                 <Terminal size={13} />
                 <code>{status.action}</code>
@@ -280,14 +316,12 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
             )}
-            {status?.hint && !serviceUnavailable && status.hint !== message && status.hint !== status.detail && <p className="mcp-hint">{status.hint}</p>}
+            {status.hint && status.hint !== notice && status.hint !== status.error && <p className="mcp-hint">{status.hint}</p>}
           </div>
         )}
 
-        <details className="mcp-block mcp-setup">
-          <summary><QrCode size={16} /><span>首次连接设置</span></summary>
-          <div className="mcp-setup-content">
-          <p className="mcp-guide-name">{sources.find(item => item.id === selected)?.name || ({ dingtalk: "钉钉", wechat: "微信", feishu: "飞书", mock: "演示数据" }[selected])}</p>
+        <section className="mcp-block">
+          <div className="mcp-block-title"><QrCode size={14} /><span>配置引导</span></div>
           <p className="mcp-intro">{guide.intro}</p>
           <ol className="mcp-steps">
             {guide.steps.map((step, index) => (
@@ -305,29 +339,25 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
               </li>
             ))}
           </ol>
-          </div>
-        </details>
+        </section>
 
         <section className="mcp-block">
-          <div className="mcp-block-title"><Cable size={16} /><span>读取材料</span></div>
-          <p className="mcp-intro">检测授权状态后，同步聊天材料。</p>
+          <div className="mcp-block-title"><Cable size={14} /><span>连接与同步</span></div>
           {selected !== "mock" && (
-            <details className="mcp-options">
-              <summary>读取选项</summary>
+            <>
               <label className="mcp-field">
-                <span>关注的问题（可选）</span>
-                <input value={goal} onChange={event => setGoal(event.target.value)} placeholder="例如：核对押金金额与退款时间" />
+                <span>调查目标（可选，供 AI 精准取数）</span>
+                <input value={goal} onChange={event => setGoal(event.target.value)} placeholder="例如：查张三与王五关于合作款的承诺与履约差异" />
               </label>
               <label className="mcp-field">
-                <span>本机导出文件路径（如有）</span>
-                <input value={sourceData} onChange={event => setSourceData(event.target.value)} placeholder="D:\export\session.json" />
+                <span>导出文件绝对路径（部分渠道需提供）</span>
+                <input value={sourceData} onChange={event => setSourceData(event.target.value)} placeholder="D:\\export\\session.json" />
               </label>
               <label className="mcp-field inline">
-                <span>检索窗口数</span>
+                <span>聚焦窗口数</span>
                 <input type="number" min={1} max={20} value={maxWindows} onChange={event => setMaxWindows(Number(event.target.value) || 8)} />
               </label>
-              <small>范围 1–20，默认 8。</small>
-            </details>
+            </>
           )}
           <div className="mcp-actions">
             <button type="button" className="mcp-btn" disabled={busy !== ""} onClick={() => void connect()}>
@@ -377,6 +407,14 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
           </section>
         )}
 
+        <details className="mcp-endpoints">
+          <summary>A 端已接入接口（经 /api/source/* 桥接）</summary>
+          <ul>
+            {ENDPOINTS.map(([method, path, desc]) => (
+              <li key={path}><span className={`mcp-method ${method.toLowerCase()}`}>{method}</span><code>{path}</code><em>{desc}</em></li>
+            ))}
+          </ul>
+        </details>
       </div>
     </section>
   );

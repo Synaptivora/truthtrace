@@ -40,6 +40,7 @@ import tempfile
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from .backends import MockBackend, DingTalkBackend, WeChatBackend, FeishuBackend
 from .tools import ToolRegistry
@@ -234,28 +235,38 @@ class SourceService:
             self._state[source_id] = st
         return st
 
+    def _probe_one_for_list(self, sid: str) -> dict:
+        """list_sources 用的单渠道探测：单个渠道炸了只返回空，不影响整张列表。"""
+        try:
+            # 列表徽标必须和详情页同源：以前列表只读进程里的旧状态，于是会出现
+            # 「卡片写未连接、点进去说已就绪」。探测有 30 秒缓存，代价可以接受。
+            return self._probe(sid) if sid == "mock" else self._probe_cached(sid)
+        except Exception:  # noqa: BLE001  列表绝不能因为某个渠道探测失败而整个 500
+            return {}
+
     def list_sources(self) -> dict:
+        # 三个渠道的探测互相独立（dws 子进程 / 开一次微信库 / lark-cli 子进程），
+        # 串行要 3~6 秒，前端面板一直空转；并行后总耗时≈最慢的一个渠道（约 1~2 秒）。
+        # _probe_cached 各自加锁读写缓存、互不共享可变状态，并发安全。
+        sids = [c["id"] for c in CATALOG]
+        with ThreadPoolExecutor(max_workers=max(1, len(sids))) as pool:
+            probes = dict(zip(sids, pool.map(self._probe_one_for_list, sids)))
+
         out = []
         for c in CATALOG:
             sid = c["id"]
-            # 列表徽标必须和详情页同源：以前列表只读进程里的旧状态，于是会出现
-            # 「卡片写未连接、点进去说已就绪」。探测有 30 秒缓存，代价可以接受。
-            try:
-                probe = self._probe(sid) if sid == "mock" else self._probe_cached(sid)
-            except Exception:  # noqa: BLE001  列表绝不能因为某个渠道探测失败而整个 500
-                probe = {}
             with self._lock:
-                st = self._merge_probe(self._ensure(sid), probe)
-                out.append({
-                    "id": sid,
-                    "name": c["name"],
-                    "auth": c["auth"],
-                    "authorized": st["authorized"],
-                    "status": st["status"],
-                    "detail": st.get("detail", ""),
-                    "last_sync": st["last_sync"],
-                    "count": st["count"],
-                })
+                st = self._merge_probe(self._ensure(sid), probes.get(sid) or {})
+            out.append({
+                "id": sid,
+                "name": c["name"],
+                "auth": c["auth"],
+                "authorized": st["authorized"],
+                "status": st["status"],
+                "detail": st.get("detail", ""),
+                "last_sync": st["last_sync"],
+                "count": st["count"],
+            })
         return {"sources": out}
 
     @staticmethod

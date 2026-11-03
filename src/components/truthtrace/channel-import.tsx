@@ -88,16 +88,16 @@ const CHANNEL: Record<ChannelId, {
 // 两个渠道现在都走「先读取、再挑」：钉钉靠 dws，微信靠 wechat-ai-memory 的本地数据源
 const LIVE_COPY: Record<ChannelId, { title: string; badge: string; desc: string; note: string }> = {
   dingtalk: {
-    title: "读取钉钉聊天",
-    badge: "需在本机授权钉钉",
-    desc: "先扫描会话清单，再选择需要的聊天。",
-    note: "首次使用需通过 dws 扫码登录。扫描仅获取会话名称和条数，选中后才读取消息。",
+    title: "直接从钉钉读取",
+    badge: "已登录 dws 时可用",
+    desc: "选一个时间范围，扫一次清单；勾好要的会话再读取正文。扫描只做一次，读取沿用这份清单。",
+    note: "扫描只统计会话与条数、不读正文（近 30 天约十几秒）；勾中的会话才会被读取，没勾的群一条都不读。某一段条数偏少时，点该行右侧的刷新按钮单独重读。",
   },
   wechat: {
-    title: "读取微信聊天",
-    badge: "需在本机授权微信",
-    desc: "先扫描会话清单，再选择需要的聊天。",
-    note: "首次授权需获取本机数据库密钥，会重启微信一次。之后可使用缓存，也可导入已导出的 JSON 文件。",
+    title: "直接从微信读取",
+    badge: "本机已缓存数据库密钥时可用",
+    desc: "选一个时间范围，扫一次本机会话清单；勾好要的会话再读取正文，不必先导出 JSON。",
+    note: "首次需要抓一次数据库密钥（会重启微信一次），之后走缓存；读不到时可用下方「导出的 JSON 文件」。",
   },
 };
 
@@ -258,7 +258,7 @@ export function ChannelImport({
     fetch(`/api/source/status?source=${encodeURIComponent(meta.source)}`)
       .then(response => readJson<SourceStatus>(response, "无法读取渠道状态"))
       .then(data => { if (alive) setStatus(data); })
-      .catch(cause => { if (alive) setStatus({ authorized: false, status: "error", hint: cause instanceof Error ? cause.message : "无法连接接入服务" }); });
+      .catch(() => { if (alive) setStatus({ authorized: false, hint: "无法连接数据源服务" }); });
     return () => { alive = false; };
   }, [meta.source]);
 
@@ -824,7 +824,6 @@ export function ChannelImport({
   const pickedInPreview = preview
     ? (preview.messages || []).filter(message => msgChecked(preview.id, message.seq)).length
     : 0;
-  const sessionServiceUnavailable = /INGESTION_SERVICE_URL|未配置.*解析服务|无法连接.*服务/.test(sessError);
 
   return (
     <div className="ci-overlay" role="dialog" aria-modal="true" aria-label={`从${meta.name}导入聊天记录`}>
@@ -845,10 +844,10 @@ export function ChannelImport({
           </button>
           <div className="ci-title">
             <strong>从{meta.name}导入聊天记录</strong>
-            <small>{started ? "选择需要保留的消息" : "选择聊天，导入为案件材料"}</small>
+            <small>{started ? "选择会话与时间范围，逐条勾选后导入" : "按时间范围直接读取，无需导出文件"}</small>
           </div>
           <span className={`ci-status ${status?.status === "ready" ? "ok" : "warn"}`}>
-            {!status ? "检测中…" : status.status === "ready" ? "已连接" : status.status === "error" ? "服务未连接" : "待授权"}
+            {status?.status === "ready" ? "工具已就绪" : "需要授权"}
           </span>
           <button className="ci-close" type="button" onClick={onClose} aria-label="关闭">×</button>
         </header>
@@ -876,7 +875,7 @@ export function ChannelImport({
                     : sessFresh ? "重新扫描" : "扫描会话"}
                 </button>
               </div>
-              <details className="ci-setup-note"><summary>首次使用须知</summary><p>{LIVE_COPY[channel].note}</p></details>
+              <p className="ci-hint">{LIVE_COPY[channel].note}</p>
 
               {/* 先勾再读：清单只是标题与条数，勾中的会话才会被真正读取 */}
               <div className="ci-sess">
@@ -907,24 +906,20 @@ export function ChannelImport({
                   {sessStale && !sessLoading && <span className="ci-sess-stale">范围已改，重新扫描</span>}
                 </div>
 
-                {sessError && <div className="ci-feedback" role="alert">
-                  <strong>{sessionServiceUnavailable ? "接入服务未连接" : "未能扫描会话"}</strong>
-                  <p>{sessionServiceUnavailable ? "启动本机接入服务后重试，也可先用示例材料。" : sessError}</p>
-                  {sessionServiceUnavailable && <details><summary>查看配置说明</summary><p>{sessError}。在 .env.local 设置 INGESTION_SERVICE_URL 后重启前端。</p></details>}
-                </div>}
+                {sessError && <p className="ci-error" role="alert">{sessError}</p>}
 
                 {!sessList && !sessLoading && (
                   <div className="ci-sess-empty">
-                    {!sessError && <p>
-                      扫描后，在这里选择要读取的会话。
-                    </p>}
-                    <details className="ci-sess-empty-alt">
-                      <summary>直接读取整个时间范围</summary>
-                      <p>将读取该范围内的全部会话。</p>
+                    <p>
+                      选好时间范围后点「扫描会话」：<b>只列清单</b>（会话名、条数、起止日期），
+                      不读正文、不占证据。勾好要读的几段，再点一次「读取」。
+                    </p>
+                    <p className="ci-sess-empty-alt">
+                      不想逐段挑？直接整段读，省掉扫描这一步。
                       <button type="button" onClick={() => void readAll()} disabled={loadingSource}>
-                        {loadingSource ? `读取中… ${sweepSeconds}s` : "读取全部会话"}
+                        {loadingSource ? `读取中… ${sweepSeconds}s` : "跳过清单，直接读取全部会话"}
                       </button>
-                    </details>
+                    </p>
                   </div>
                 )}
 
@@ -951,7 +946,8 @@ export function ChannelImport({
               {sessList && sessList.length > 0 && (
                 <div className="ci-sess-foot">
                   <span>
-                    仅读取选中的 {pickedSessions.length} 段会话
+                    只读勾中的 {pickedSessions.length} 段，其余不读；
+                    清单已缓存，点读取不会再扫一遍
                   </span>
                   <button
                     type="button"
@@ -969,7 +965,7 @@ export function ChannelImport({
 
             {channel === "wechat" && (
               <details className="ci-fallback">
-                <summary>导入已导出的 JSON 文件</summary>
+                <summary>没有密钥？改用导出的 JSON 文件</summary>
                 <ol className="ci-steps">
                   {meta.steps.map((step, index) => (
                     <li key={step}><b>{String(index + 1).padStart(2, "0")}</b><span>{step}</span></li>
@@ -1033,15 +1029,15 @@ export function ChannelImport({
             <div className="ci-demo">
               <div>
                 <strong>先看看效果？</strong>
-                <p>使用虚构会话体验导入流程。</p>
+                <p>用 3 段虚构会话走完「勾选 → 预览 → 导入」，不读取你本机任何聊天数据。</p>
               </div>
               <button type="button" onClick={() => void loadDemo()} disabled={loadingSource}>载入演示会话</button>
             </div>
 
             {sourceNotice && <p className="ci-note">{sourceNotice}</p>}
             {sourceError && <p className="ci-error" role="alert">{sourceError}</p>}
-            {(status?.detail || status?.hint) && !sessError && (
-              <details className="ci-connection-note"><summary>{status.status === "error" ? "接入服务未连接 · 查看说明" : "查看连接状态"}</summary><p>{status.detail || status.hint}</p></details>
+            {(status?.detail || status?.hint) && (
+              <p className="ci-hint">渠道状态：{status.detail || status.hint}</p>
             )}
           </div>
         ) : (
