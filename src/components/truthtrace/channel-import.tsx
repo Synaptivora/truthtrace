@@ -412,7 +412,7 @@ export function ChannelImport({
     }
   }, [meta.source]);
 
-  useEffect(()=>{if(channel!=="dingtalk"||!status?.authorized||autoListed.current)return;const timer=setTimeout(()=>{autoListed.current=true;void loadSessions(liveStart,liveEnd);},0);return()=>clearTimeout(timer);},[channel,status?.authorized,loadSessions,liveStart,liveEnd]);
+  useEffect(()=>{if(!status?.authorized||autoListed.current)return;const timer=setTimeout(()=>{autoListed.current=true;void loadSessions(liveStart,liveEnd);},0);return()=>clearTimeout(timer);},[channel,status?.authorized,loadSessions,liveStart,liveEnd]);
 
   /** 向钉钉取一个时间范围的快照。进入选择页与「改了范围重新读取」共用这一条路径，
    *  区别只在是否把左侧范围同步成这次取数的范围。 */
@@ -868,7 +868,7 @@ export function ChannelImport({
                 <h3>{LIVE_COPY[channel].title}</h3>
                 <span>{LIVE_COPY[channel].badge}</span>
               </div>
-              <p>选择相关联系人或群，再核对时间范围与消息。默认最近一周。</p>{channel==="dingtalk"&&!status?.authorized&&<ChannelAuth onAuthorized={()=>{setStatus({authorized:true,status:"ready"});setAuthRefresh(v=>v+1);}}/>}
+              <p>选择相关联系人或群，再核对时间范围与消息。默认最近一周。</p>{!status?.authorized&&<ChannelAuth channel={channel} onAuthorized={()=>{setStatus({authorized:true,status:"ready"});setAuthRefresh(v=>v+1);}}/>}
               <div className="ci-live-row">
                 <DateTimeField label="开始" value={liveStart} onChange={setLiveStart} ariaLabel="直读开始时间" />
                 <DateTimeField label="结束" value={liveEnd} onChange={setLiveEnd} ariaLabel="直读结束时间" />
@@ -967,7 +967,7 @@ export function ChannelImport({
 
             {channel === "wechat" && (
               <details className="ci-fallback">
-                <summary>没有密钥？改用导出的 JSON 文件</summary>
+                <summary>暂不连接微信？导入已导出的 JSON 文件</summary>
                 <ol className="ci-steps">
                   {meta.steps.map((step, index) => (
                     <li key={step}><b>{String(index + 1).padStart(2, "0")}</b><span>{step}</span></li>

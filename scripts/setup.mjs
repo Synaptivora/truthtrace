@@ -309,7 +309,7 @@ async function ensurePythonDeps(missing, onLine) {
 async function ensureWamSource(onLine) {
   const found = findWamSrc();
   if (found) {
-    if (!found.patched && existsSync(PATCH_FILE)) {
+    if (existsSync(PATCH_FILE) && readFileSync(PATCH_FILE, 'utf8') !== readFileSync(join(found.path, 'wechat_context_exporter', 'sources', 'wechat4_key_capture.py'), 'utf8')) {
       copyFileSync(PATCH_FILE, join(found.path, 'wechat_context_exporter', 'sources', 'wechat4_key_capture.py'));
       onLine?.('已为 wechat-ai-memory 补上 A 侧密钥缓存补丁');
       return { status: 'ok', detail: `源码已就绪并打好补丁：${found.path}` };
@@ -480,25 +480,29 @@ export async function actionDingtalkLogin(onLine = () => {}) {
 
 /** 微信首次取密钥：会 taskkill 微信并重启，必须用户在手机上确认。绝不自动执行。 */
 export async function actionCaptureWechatKey(onLine = () => {}) {
+  if (!IS_WIN) return { ok: false, output: '', note: '微信本机读取目前只支持 Windows。' };
+  const prepared = await ensureWamSource(onLine);
   const wam = findWamSrc();
-  if (!wam) return { ok: false, output: '', note: '未找到 wechat-ai-memory 源码，请先点「一键配置」' };
+  if (!wam) return { ok: false, output: '', note: prepared.detail || '微信读取组件准备失败，请重试。' };
   const venv = join(HOME, 'wam_probe', 'venv', 'Scripts', 'python.exe');
   const python = existsSync(venv) ? venv : PYTHON;
-  const env = { ...process.env, SYNAPSE_WECHAT_SRC: wam.path };
-  const frida = await quick(python, ['-c', 'import frida'], { env });
-  if (!frida.ok) {
-    onLine('缺少 frida，正在安装（首次取密钥需要）…');
-    await run(python, ['-m', 'pip', 'install', 'frida', 'pycryptodome', 'zstandard'],
+  const env = toolEnvironment({ SYNAPSE_WECHAT_SRC: wam.path, PYTHONUNBUFFERED: '1' });
+  const check = () => quick(python, ['-c', 'import frida, pywinauto, Crypto, zstandard'], { env });
+  if (!(await check()).ok) {
+    onLine('正在准备微信首次连接组件…');
+    const installed = await run(python, ['-m', 'pip', 'install', 'frida', 'pywinauto', 'pycryptodome', 'zstandard'],
       { timeout: 300_000, onLine, env });
+    if (installed.code !== 0 || !(await check()).ok) return { ok: false, output: '', note: '微信连接组件安装失败；微信尚未重启，请检查网络后重试。' };
   }
-  onLine('⚠ 接下来微信会被关闭并重新拉起，请在手机上确认登录…');
+  onLine('微信将重新打开，请在微信窗口扫码或用手机确认登录…');
   const result = await run(python, [join(ROOT, 'scripts', 'prime_wechat_key.py')],
-    { timeout: 300_000, onLine, env });
+    { timeout: 360_000, onLine, env });
   const ok = result.code === 0 && keyCacheInfo().exists;
+  const reason = result.output.split(/\r?\n/).filter(line => line.includes('SourceError:') || line.startsWith('[×]')).pop();
   return {
     ok,
     output: result.output,
-    note: ok ? '密钥已写入本机缓存，之后导入不再需要重启微信' : '取密钥未完成，请确认微信已登录、手机已确认后重试',
+    note: ok ? '微信已连接，可以选择会话；下次无需重复登录' : reason || '微信连接未完成，请在微信窗口完成扫码或手机确认后重试',
   };
 }
 
