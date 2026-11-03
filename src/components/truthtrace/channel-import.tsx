@@ -412,7 +412,7 @@ export function ChannelImport({
     }
   }, [meta.source]);
 
-  useEffect(()=>{if(channel!=="dingtalk"||!status?.authorized||autoListed.current)return;autoListed.current=true;const timer=setTimeout(()=>void loadSessions(liveStart,liveEnd),0);return()=>clearTimeout(timer);},[channel,status?.authorized,loadSessions,liveStart,liveEnd]);
+  useEffect(()=>{if(channel!=="dingtalk"||!status?.authorized||autoListed.current)return;const timer=setTimeout(()=>{autoListed.current=true;void loadSessions(liveStart,liveEnd);},0);return()=>clearTimeout(timer);},[channel,status?.authorized,loadSessions,liveStart,liveEnd]);
 
   /** 向钉钉取一个时间范围的快照。进入选择页与「改了范围重新读取」共用这一条路径，
    *  区别只在是否把左侧范围同步成这次取数的范围。 */
@@ -789,7 +789,7 @@ export function ChannelImport({
       if (analysed.meta?.droppedEvidence) notice.droppedEvidence = analysed.meta.droppedEvidence;
       if (analysed.meta?.droppedImages) notice.droppedImages = analysed.meta.droppedImages;
       await onReady({
-        evidence, analysis, caseId:existing?.caseId, goal:existing?.goal||goal, caseName: existing?.caseName||goal?.slice(0,60)||caseName.trim(),
+        evidence, analysis, caseId:existing?.caseId, goal:goal||existing?.goal, caseName: existing?.caseName||goal?.slice(0,60)||caseName.trim(),
         ...(Object.keys(notice).length ? { notice } : {}),
       });
     } catch (cause) {
