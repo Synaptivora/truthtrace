@@ -68,7 +68,7 @@ export function InvestigationWorkbench(_initialData: WorkbenchProps) {
         if(task&&task.state!=="cancelled") {
           const service=await fetch("/api/assistant/service",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
           if(!service.ok)throw new Error("材料已保存，但调查服务暂不可用，请在助手中继续核查");
-          const revised=await fetch(`/api/investigations/${task.id}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"revise"})});
+          const revised=await fetch(`/api/investigations/${task.id}/actions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"revise",goal:data.case.goal||task.goal})});
           if(!revised.ok)throw new Error("材料已保存，自动继续失败，请在助手中加入新材料");
         }
       }

@@ -61,7 +61,7 @@ export function AgentPanel({ context, onReady, onChannel }: { context: AgentCont
   useEffect(()=>{const timer=setTimeout(()=>{setGoal(context?.goal||"");if(context?.caseId&&context.goal){setOpen(true);setView("investigation");}else if(!context?.caseId)setView("chat");},0);return()=>clearTimeout(timer);},[context?.caseId,context?.goal]);
   async function importFiles(files:File[]){if(!files.length)return;setMaterialBusy(true);setMaterialError("");try{
     const next=await analyzeFiles(files,new AbortController().signal,()=>{},context?.evidence||[]);
-    await onReady({...next,caseId:context?.caseId,caseName:context?.caseName||goal.slice(0,60)||"新的调查",goal:context?.goal||goal});
+    await onReady({...next,caseId:context?.caseId,caseName:context?.caseName||goal.slice(0,60)||"新的调查",goal:goal||context?.goal});
     setView("investigation");
   }catch(e){setMaterialError((e as Error).message);}finally{setMaterialBusy(false);}}
   function configure(draft:string){setGoal(draft);returnTo.current="investigation";setView("model");}
@@ -107,8 +107,8 @@ export function AgentPanel({ context, onReady, onChannel }: { context: AgentCont
         <button type="button" aria-pressed={["settings","model","connection"].includes(view)} onClick={()=>setView("settings")}><Settings size={17}/>设置</button>
       </nav>
       <section hidden={view!=="settings"} className="agent-settings"><h2>连接与显示设置</h2><p>按当前需要配置，目标和材料会保留。</p><button onClick={()=>{returnTo.current=context?.analysis?"investigation":"chat";setView("model");}}>模型设置</button><button onClick={()=>setView("connection")}><Cable size={16}/>连接渠道</button><AppSettings embedded/></section>
-      {view === "materials"&&<section className="agent-settings"><h2>{context?"把新材料交给我":"先选与问题有关的材料"}</h2><p>{context?.goal||goal||"可以先输入目标，也可以直接添加材料。"}</p><p>导入后保留你的目标；已有调查会纳入新材料重新核查。</p><input ref={upload} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.json" onChange={e=>{void importFiles(Array.from(e.target.files||[]));e.target.value="";}}/><button disabled={materialBusy} onClick={()=>upload.current?.click()}>上传文件或截图</button><button disabled={materialBusy} onClick={()=>supplement("dingtalk")}>选择钉钉会话</button><button disabled={materialBusy} onClick={()=>supplement("wechat")}>选择微信会话</button>{materialBusy&&<p role="status">正在整理，原有材料和目标会保留…</p>}{materialError&&<p role="alert">{materialError}</p>}</section>}
-      {view === "investigation"&&context?.analysis&&<InvestigatorPanel key={context.caseId} context={{...context,analysis:context.analysis}} initialGoal={goal||context.goal} routedMode={routeMode} onConfigure={configure} onSupplement={supplement}/>}
+      {view === "materials"&&<section className="agent-settings"><h2>{context?"把新材料交给我":"先选与问题有关的材料"}</h2><p>{goal||context?.goal||"可以先输入目标，也可以直接添加材料。"}</p><p>导入后保留你的目标；已有调查会纳入新材料重新核查。</p><input ref={upload} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.json" onChange={e=>{void importFiles(Array.from(e.target.files||[]));e.target.value="";}}/><button disabled={materialBusy} onClick={()=>upload.current?.click()}>上传文件或截图</button><button disabled={materialBusy} onClick={()=>supplement("dingtalk")}>选择钉钉会话</button><button disabled={materialBusy} onClick={()=>supplement("wechat")}>选择微信会话</button>{materialBusy&&<p role="status">正在整理，原有材料和目标会保留…</p>}{materialError&&<p role="alert">{materialError}</p>}</section>}
+      {view === "investigation"&&context?.analysis&&<InvestigatorPanel key={context.caseId} context={{...context,analysis:context.analysis}} initialGoal={goal||context.goal} routedMode={routeMode} onGoalChange={value=>{setGoal(value);setRouteMode(undefined);}} onConfigure={configure} onSupplement={supplement}/>}
       {view === "investigation"&&routeReason&&<small className="agent-route-note">{routeReason}</small>}
       {view === "connection" && <McpGuide onClose={() => setView("settings")} />}
       {view === "model" && <section className="agent-settings" aria-label="模型连接设置">

@@ -8,8 +8,8 @@ import type { ChannelId } from "./channel-import";
 async function call(url:string,body?:unknown){const r=await fetch(url,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:undefined);const data=await r.json();if(!r.ok)throw new Error(data.error||"请求失败");return data;}
 const terms:Record<string,string>={statement:"原文陈述",observation:"材料观察",inference:"推断",supported:"原文支持",partially_supported:"部分支持",disputed:"存在争议",insufficient:"证据不足"};
 const states:Record<string,string>={queued:"正在准备调查",running:"正在核对材料",waiting_user:"有一个问题需要你确认",paused:"进度已保留",completed:"调查结果",failed:"遇到了问题，进度已保留",cancelled:"已结束本次调查"};
-type Props={context:CaseAnalysis;initialGoal?:string;routedMode?:InvestigationMode;onConfigure:(goal:string)=>void;onSupplement:(channel?:ChannelId,goal?:string)=>void};
-export function InvestigatorPanel({context,initialGoal,routedMode,onConfigure,onSupplement}:Props) {
+type Props={context:CaseAnalysis;initialGoal?:string;routedMode?:InvestigationMode;onGoalChange:(goal:string)=>void;onConfigure:(goal:string)=>void;onSupplement:(channel?:ChannelId,goal?:string)=>void};
+export function InvestigatorPanel({context,initialGoal,routedMode,onGoalChange,onConfigure,onSupplement}:Props) {
   const [goal,setGoal]=useState(initialGoal||context.goal||""),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [task,setTask]=useState<Task|null>(null),[source,setSource]=useState<string|null>(null);
   const [allowImages,setAllowImages]=useState(false),[mode,setMode]=useState<InvestigationMode|"auto">("auto");
@@ -32,7 +32,7 @@ export function InvestigatorPanel({context,initialGoal,routedMode,onConfigure,on
   return <section aria-label="本次调查" className="investigator-panel investigator-embedded">
     <header><div><small>咪探长 · {context.evidence.length} 份本案材料</small><h2>{finished?"查到了什么，还缺什么":task?.state==="running"?"我正在核对你的问题":"先确认这次要查清的问题"}</h2></div></header>
     <details key={task?.id||"new"} open={!task}><summary>{task?"调整目标或开始新调查":"本次目标与范围"}</summary>
-      <label>调查目标<textarea aria-label="调查目标" value={goal} onChange={e=>setGoal(e.target.value)} maxLength={4000} placeholder="例如：退款承诺与实际到账是否一致？"/></label>
+      <label>调查目标<textarea aria-label="调查目标" value={goal} onChange={e=>{setGoal(e.target.value);onGoalChange(e.target.value);}} maxLength={4000} placeholder="例如：退款承诺与实际到账是否一致？"/></label>
       <p className="investigator-route">{investigationModes[selectedMode].description} 只使用本案已选材料。</p>
       <details><summary>调整调查范围（可选）</summary><label>调查方式<select aria-label="调查方式" value={mode} onChange={e=>setMode(e.target.value as InvestigationMode|"auto")}><option value="auto">由助手安排</option>{Object.entries(investigationModes).map(([key,value])=><option key={key} value={key}>{value.label}</option>)}</select></label><p>当前调查方式不会因修改此选项而改变；新方式用于下一次调查。</p><label><input type="checkbox" checked={allowImages} onChange={e=>setAllowImages(e.target.checked)}/>允许模型查看原图（需视觉能力）</label></details>
       <p className="investigator-privacy">开始后，选定材料会发送给调查模型。你可以随时停止；没有选中的会话不会自动加入。</p>
