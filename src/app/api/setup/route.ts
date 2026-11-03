@@ -31,8 +31,15 @@ const jobs = globalStore.__ttSetupJobs ?? (globalStore.__ttSetupJobs = new Map<s
 
 function localOnly(request: Request): boolean {
   if (process.env.SYNAPSE_SETUP_ENABLED === "0") return false;
-  const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
-  return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+  try {
+    const url = new URL(request.url);
+    const host = new URL(`http://${request.headers.get("host") || ""}`).hostname;
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(host)) return false;
+    if (url.host !== request.headers.get("host")) return false;
+    const origin = request.headers.get("origin");
+    if (origin && origin !== url.origin) return false;
+    return request.headers.get("sec-fetch-site") !== "cross-site";
+  } catch { return false; }
 }
 
 function snapshot(job: Job) {
@@ -53,6 +60,7 @@ function snapshot(job: Job) {
 /** GET /api/setup            → 只读检测结果（零副作用）
  *  GET /api/setup?job=<id>   → 轮询某个配置任务的进度 */
 export async function GET(request: Request) {
+  if (!localOnly(request)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const url = new URL(request.url);
   const id = url.searchParams.get("job");
   if (id) {
@@ -72,8 +80,8 @@ export async function POST(request: Request) {
       { status: 403 },
     );
   }
-  const body = await request.json().catch(() => ({})) as { action?: string };
-  const action = body.action || "install";
+  const body = await request.json().catch(() => null);
+  const action = body && typeof body === "object" ? body.action : undefined;
   if (!["install", "login-dingtalk", "capture-wechat-key"].includes(action)) {
     return NextResponse.json({ error: `未知操作 ${action}` }, { status: 400 });
   }
@@ -92,14 +100,14 @@ export async function POST(request: Request) {
   void (async () => {
     try {
       if (action === "install") {
-        await runSetup(step => {
+        const report = await runSetup(step => {
           if (typeof step.log === "string") {
             job.lines.push(step.log);
             return;
           }
           if (typeof step.index === "number") job.steps[step.index] = { ...step };
         });
-        const failed = job.steps.some(step => step.status === "failed");
+        const failed = report.status !== "ok" || !report.after.ready;
         job.status = failed ? "failed" : "ok";
         job.note = failed ? "部分步骤失败，请查看日志" : "配置完成，可刷新渠道状态";
         job.ok = !failed;

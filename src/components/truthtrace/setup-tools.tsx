@@ -56,6 +56,7 @@ export function SetupTools({ onDone }: { onDone?: () => void }) {
       const response = await fetch("/api/setup", { cache: "no-store" });
       if (!response.ok) throw new Error(`检测失败（${response.status}）`);
       setDetect(await response.json() as Detect);
+      setError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -88,6 +89,9 @@ export function SetupTools({ onDone }: { onDone?: () => void }) {
         await new Promise(resolve => setTimeout(resolve, 800));
         const poll = await fetch(`/api/setup?job=${encodeURIComponent(data.jobId)}`, { cache: "no-store" });
         const snapshot = await poll.json().catch(() => ({})) as Job;
+        if (!poll.ok || !Array.isArray(snapshot.steps) || !Array.isArray(snapshot.lines)) {
+          throw new Error(snapshot.error || `读取配置进度失败（${poll.status}），请重新检测`);
+        }
         setJob(snapshot);
         if (snapshot.status !== "running") break;
       }
