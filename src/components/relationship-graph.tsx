@@ -120,4 +120,3 @@ export function RelationshipGraph({ analysis, evidence = noEvidence, focusedEvid
     </div>
   );
 }
-
