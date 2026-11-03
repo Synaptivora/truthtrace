@@ -11,7 +11,7 @@ function apply(preferences: Preferences) {
   document.documentElement.dataset.reduceMotion = String(preferences.reduceMotion);
 }
 
-export function AppSettings() {
+export function AppSettings({embedded=false}:{embedded?:boolean}) {
   const [open, setOpen] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>({ text: "standard", reduceMotion: false });
   const [notice, setNotice] = useState("");
@@ -50,8 +50,8 @@ export function AppSettings() {
   function close() { setOpen(false); trigger.current?.focus(); }
 
   return <>
-    <button ref={trigger} type="button" className="app-settings-trigger" aria-expanded={open} aria-controls="app-settings" onClick={() => setOpen(value => !value)}><Settings size={16} />应用设置</button>
-    {open && <section ref={panel} id="app-settings" className="app-settings-panel" role="dialog" aria-label="应用设置" tabIndex={-1} onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
+    <button ref={trigger} type="button" className={embedded?"app-settings-inline-trigger":"app-settings-trigger"} aria-expanded={open} aria-controls="app-settings" onClick={() => setOpen(value => !value)}><Settings size={16} />应用设置</button>
+    {open && <section ref={panel} id="app-settings" className={embedded?"app-settings-panel app-settings-inline":"app-settings-panel"} role="dialog" aria-label="应用设置" tabIndex={-1} onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); close(); } }}>
       <header><h2>应用设置</h2><button type="button" onClick={close} aria-label="关闭应用设置"><X size={18} /></button></header>
       <div className="app-setting-row"><div><strong>界面语言</strong><small>当前版本提供简体中文</small></div><span>简体中文</span></div>
       <label className="app-setting-row"><div><strong>咪探长面板字号</strong><small>调整对话和配置页的文字大小</small></div><select value={preferences.text} onChange={event => update({ ...preferences, text: event.target.value as Preferences["text"] })}><option value="standard">标准</option><option value="large">较大</option></select></label>

@@ -270,3 +270,6 @@ body.case-entry { background:radial-gradient(ellipse at 75% 6%,#6b47272e,transpa
   .analysis-emblem>span { animation:none; }
   .analysis-progress>span,.entry-primary { transition:none; }
 }
+
+.entry-goal{display:grid;gap:12px;margin:24px 0;padding:24px;background:#f7edda;color:#493c2e;border:1px solid #bda47a;border-radius:16px}
+.entry-goal label{font-size:16px;font-weight:600}.entry-goal textarea{min-height:94px;width:100%;box-sizing:border-box;resize:vertical;background:#fffaf0;border:1px solid #c8b18b;border-radius:9px;padding:14px;font:15px/1.6 system-ui;color:#493c2e}.entry-goal button{justify-self:start}.entry-goal textarea:focus-visible{outline:2px solid #a17b40;outline-offset:3px}

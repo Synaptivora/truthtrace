@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import { AnalysisResultSchema, EvidenceSchema } from "@/lib/contracts";
 import { describeEmptyImport } from "./api-client";
 import type { CaseAnalysis, ImportNotice } from "./api-client";
+import { ChannelAuth } from "./channel-auth";
 import { DateTimeField } from "./datetime-field";
 
 export type ChannelId = "dingtalk" | "wechat";
@@ -91,7 +92,7 @@ const LIVE_COPY: Record<ChannelId, { title: string; badge: string; desc: string;
     title: "直接从钉钉读取",
     badge: "已登录 dws 时可用",
     desc: "选一个时间范围，扫一次清单；勾好要的会话再读取正文。扫描只做一次，读取沿用这份清单。",
-    note: "扫描只统计会话与条数、不读正文（近 30 天约十几秒）；勾中的会话才会被读取，没勾的群一条都不读。某一段条数偏少时，点该行右侧的刷新按钮单独重读。",
+    note: "先获取范围内的会话清单；只有选中的内容才会导入案件。清单可能不完整，请留意覆盖提示。",
   },
   wechat: {
     title: "直接从微信读取",
@@ -182,17 +183,24 @@ const PREVIEW_LIMIT = 500;
 
 export function ChannelImport({
   channel,
+  existing,
+  goal,
   onClose,
   onReady,
 }: {
   channel: ChannelId;
+  existing?: CaseAnalysis;
+  goal?: string;
   onClose: () => void;
-  onReady: (result: CaseAnalysis) => void;
+  onReady: (result: CaseAnalysis) => void | Promise<void>;
 }) {
   const meta = CHANNEL[channel];
   const [activeSource, setActiveSource] = useState(meta.source);
   const [status, setStatus] = useState<SourceStatus | null>(null);
   const [handle, setHandle] = useState<string | null>(null);
+  const [sessionSearch,setSessionSearch]=useState("");
+  const [authRefresh,setAuthRefresh]=useState(0);
+  const autoListed=useRef(false);
   const [pathDraft, setPathDraft] = useState("");
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
   const [loadingSource, setLoadingSource] = useState(false);
@@ -255,12 +263,13 @@ export function ChannelImport({
   // 授权状态只做「提示」，不阻断：文件已经在本地，导出/导入并不依赖当前机器已登录
   useEffect(() => {
     let alive = true;
-    fetch(`/api/source/status?source=${encodeURIComponent(meta.source)}`)
+    const refresh=()=>fetch(`/api/source/status?source=${encodeURIComponent(meta.source)}`)
       .then(response => readJson<SourceStatus>(response, "无法读取渠道状态"))
       .then(data => { if (alive) setStatus(data); })
       .catch(() => { if (alive) setStatus({ authorized: false, hint: "无法连接数据源服务" }); });
-    return () => { alive = false; };
-  }, [meta.source]);
+    void refresh();const timer=setInterval(refresh,3000);
+    return () => { alive = false;clearInterval(timer); };
+  }, [meta.source,authRefresh]);
 
   const resetPicks = () => {
     setConvOff([]);
@@ -369,7 +378,7 @@ export function ChannelImport({
       const hit = scanCache.current.get(key);
       if (hit && Date.now() - hit.at < 10 * 60_000) {
         setSessList(hit.list);
-        setSessOff([]);               // 新清单默认全选
+        setSessOff(hit.list.map(item=>item.id)); // 用户明确勾选后才导入
         setSessRange({ start: from, end: to });
         setSessCached(true);
         setSessMs(0);
@@ -390,7 +399,7 @@ export function ChannelImport({
       if (!list.length) throw new Error("这段时间里没有可读会话，请放宽时间范围");
       scanCache.current.set(key, { list, at: Date.now() });
       setSessList(list);
-      setSessOff([]);                 // 新清单默认全选
+      setSessOff(list.map(item=>item.id)); // 用户明确勾选后才导入
       setSessRange({ start: from, end: to });
       setSessMs(Math.max(1, Math.round((Date.now() - t0) / 1000)));
     } catch (cause) {
@@ -402,6 +411,8 @@ export function ChannelImport({
       setSessLoading(false);
     }
   }, [meta.source]);
+
+  useEffect(()=>{if(channel!=="dingtalk"||!status?.authorized||autoListed.current)return;const timer=setTimeout(()=>{autoListed.current=true;void loadSessions(liveStart,liveEnd);},0);return()=>clearTimeout(timer);},[channel,status?.authorized,loadSessions,liveStart,liveEnd]);
 
   /** 向钉钉取一个时间范围的快照。进入选择页与「改了范围重新读取」共用这一条路径，
    *  区别只在是否把左侧范围同步成这次取数的范围。 */
@@ -491,12 +502,6 @@ export function ChannelImport({
     }
     void fetchLive(liveStart, liveEnd, "enter", pickedSessions);
   }, [fetchLive, liveStart, liveEnd, pickedSessions]);
-
-  /** 跳过清单直接读整段范围：懒得逐段挑的人只付一次读取的成本，
-   *  不必「先扫清单（读一遍）→ 再读取（又读一遍）」。 */
-  const readAll = useCallback(() => {
-    void fetchLive(liveStart, liveEnd, "enter", []);
-  }, [fetchLive, liveStart, liveEnd]);
 
   // 全选/取消全选：默认全选（sessOff 为空），所以只需记被排除的
   const allPicked = !!sessList?.length && pickedSessions.length === sessList.length;
@@ -764,7 +769,8 @@ export function ChannelImport({
         setError(describeEmptyImport(extracted));
         return;
       }
-      const evidence = EvidenceSchema.array().min(1).parse(extracted.evidences || []);
+      const imported = EvidenceSchema.array().min(1).parse(extracted.evidences || []);
+      const evidence=[...(existing?.evidence||[]),...imported.map(item=>existing?.evidence.some(old=>old.id===item.id)?{...item,id:crypto.randomUUID()}:item)];
       setBusy("analyze");
       const analysed = await postJson<{
         analysis?: unknown;
@@ -782,8 +788,8 @@ export function ChannelImport({
       if (analysed.meta?.truncated) notice.truncatedChars = analysed.meta.truncated;
       if (analysed.meta?.droppedEvidence) notice.droppedEvidence = analysed.meta.droppedEvidence;
       if (analysed.meta?.droppedImages) notice.droppedImages = analysed.meta.droppedImages;
-      onReady({
-        evidence, analysis, caseName: caseName.trim(),
+      await onReady({
+        evidence, analysis, caseId:existing?.caseId, goal:goal||existing?.goal, caseName: existing?.caseName||goal?.slice(0,60)||caseName.trim(),
         ...(Object.keys(notice).length ? { notice } : {}),
       });
     } catch (cause) {
@@ -847,7 +853,7 @@ export function ChannelImport({
             <small>{started ? "选择会话与时间范围，逐条勾选后导入" : "按时间范围直接读取，无需导出文件"}</small>
           </div>
           <span className={`ci-status ${status?.status === "ready" ? "ok" : "warn"}`}>
-            {status?.status === "ready" ? "工具已就绪" : "需要授权"}
+            {status?.status === "ready" ? "已连接" : "等待连接"}
           </span>
           <button className="ci-close" type="button" onClick={onClose} aria-label="关闭">×</button>
         </header>
@@ -861,7 +867,7 @@ export function ChannelImport({
                 <h3>{LIVE_COPY[channel].title}</h3>
                 <span>{LIVE_COPY[channel].badge}</span>
               </div>
-              <p>{LIVE_COPY[channel].desc}</p>
+              <p>选择相关联系人或群，再核对时间范围与消息。默认最近一周。</p>{channel==="dingtalk"&&!status?.authorized&&<ChannelAuth onAuthorized={()=>{setStatus({authorized:true,status:"ready"});setAuthRefresh(v=>v+1);}}/>}
               <div className="ci-live-row">
                 <DateTimeField label="开始" value={liveStart} onChange={setLiveStart} ariaLabel="直读开始时间" />
                 <DateTimeField label="结束" value={liveEnd} onChange={setLiveEnd} ariaLabel="直读结束时间" />
@@ -912,20 +918,15 @@ export function ChannelImport({
                   <div className="ci-sess-empty">
                     <p>
                       选好时间范围后点「扫描会话」：<b>只列清单</b>（会话名、条数、起止日期），
-                      不读正文、不占证据。勾好要读的几段，再点一次「读取」。
+                      选中需要的会话，再预览要导入的内容。
                     </p>
-                    <p className="ci-sess-empty-alt">
-                      不想逐段挑？直接整段读，省掉扫描这一步。
-                      <button type="button" onClick={() => void readAll()} disabled={loadingSource}>
-                        {loadingSource ? `读取中… ${sweepSeconds}s` : "跳过清单，直接读取全部会话"}
-                      </button>
-                    </p>
+
                   </div>
                 )}
 
                 {sessList && sessList.length > 0 && (
-                  <div className="ci-sess-list">
-                    {sessList.map(item => {
+                  <div className="ci-sess-list"><label>搜索联系人或群名<input aria-label="搜索联系人或群名" value={sessionSearch} onChange={e=>setSessionSearch(e.target.value)} placeholder="输入联系人或群名称"/></label>
+                    {sessList.filter(item=>item.title.toLowerCase().includes(sessionSearch.toLowerCase())).map(item => {
                       const on = !sessOff.includes(item.id);
                       return (
                         <label key={item.id} className={`ci-sess-row ${on ? "" : "off"}`}>
@@ -1379,7 +1380,7 @@ export function ChannelImport({
                 onClick={() => void runImport()}
                 disabled={!checkedConvs.length || !caseName.trim() || busy !== "idle"}
               >
-                {busy === "extract" ? "正在按选择取数…" : busy === "analyze" ? "正在生成分析…" : "导入并开始调查"}
+                {busy === "extract" ? "正在按选择取数…" : busy === "analyze" ? "正在生成分析…" : "导入并继续"}
               </button>
             </footer>
           </>

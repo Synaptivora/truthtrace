@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Store, saveOriginal } from "@/lib/investigator/store";
 import { saveConnection, savedConnection } from "@/lib/investigator/connections";
 import { readJson } from "@/lib/agent/http";
-import { ArtifactSchema } from "@/lib/investigator/contracts";
+import { ArtifactSchema, taskStages, suggestMode } from "@/lib/investigator/contracts";
 import { validateArtifact, runTask } from "@/lib/investigator/runtime";
 import type { modelStep } from "@/lib/agent/transport";
 
@@ -16,6 +16,49 @@ beforeEach(()=>{dir=mkdtempSync(join(tmpdir(),"truthtrace-test-"));vi.stubEnv("T
 afterEach(()=>{store.close();vi.unstubAllEnvs();rmSync(dir,{recursive:true,force:true});});
 const create=()=>store.createTask("case1",{goal:"核对退款",idempotencyKey:"one"});
 describe("investigator durability and provenance",()=>{
+  it("revises a running task atomically and rejects the old worker result",()=>{
+    const t=create();store.claim("old-worker");
+    store.saveCase({caseId:"case1",evidence:[evidence,{...evidence,id:"e2",content:"尚未到账"}],analysis});
+    const next=store.action(t.id,"revise");
+    expect(next.revision).toBe(2);expect(next.snapshot).toHaveLength(2);expect(next.state).toBe("queued");
+    expect(store.owned(t.id,"old-worker",task=>{task.step=8;})).toBe(false);
+  });
+  it("detects live worker heartbeats and expires stale workers",()=>{
+    expect(store.workerReady()).toBe(false);store.workerHeartbeat("worker");expect(store.workerReady()).toBe(true);
+    store.db.prepare("UPDATE worker_health SET updated=?").run(Date.now()-20000);expect(store.workerReady()).toBe(false);
+  });
+  it("rejects answers that cite unknown or unreviewed claims",()=>{
+    const t=create();t.step=7;
+    expect(()=>validateArtifact(t,{summary:"",answer:{text:"已退款",claimIds:["invented"]}})).toThrow("已经独立核查");
+  });
+  it("recommends a route while keeping ambiguous goals and legacy tasks comprehensive",()=>{
+    expect(suggestMode("核查有没有退款日期")).toBe("fact");
+    expect(suggestMode("梳理事件时间线")).toBe("timeline");
+    expect(suggestMode("梳理矛盾与其他解释")).toBe("deep");
+    expect(suggestMode("帮我看看")).toBe("deep");
+    expect(taskStages()).toHaveLength(8);
+  });
+  it.each(["fact", "timeline"] as const)("executes the %s route without skipping independent verification",async mode=>{
+    const t=store.createTask("case1",{goal:"核对退款",mode,idempotencyKey:mode});
+    const visited:number[]=[];
+    await runTask(store,store.claim("worker")!,async()=>{
+      const current=store.task(t.id),s=current.snapshot[0];
+      if(current.step===2&&!current.reads.length)return {text:"",raw:undefined,calls:[{id:"read",name:"read_evidence",arguments:JSON.stringify({segmentId:s.id})}]};
+      visited.push(current.step);
+      const artifact={summary:"处理完成",...(current.step===0?{plan:["核查退款"]}:{}),...(current.step===2?{claims:[{id:"c",content:"承诺周五退款",kind:"statement",refs:[{evidenceId:s.evidenceId,version:s.version,segmentId:s.id,quote:"周五退款"}]}]}:{}),...(current.step===6?{checks:[{claimId:"c",status:"supported",reason:"仅支持承诺存在"}]}:{})};
+      return {text:"",raw:undefined,calls:[{id:"submit",name:"submit_artifact",arguments:JSON.stringify(artifact)}]};
+    });
+    expect(visited).toEqual(taskStages(mode));
+    expect(store.task(t.id).state).toBe("completed");
+    store.close();store=new Store(dir);expect(store.task(t.id).mode).toBe(mode);
+  });
+  it("resumes a fact-check decision at verification, not a skipped entity stage",()=>{
+    const t=store.createTask("case1",{goal:"核查退款",mode:"fact",idempotencyKey:"decision"});
+    t.state="waiting_user";t.step=8;
+    t.artifacts=[ArtifactSchema.parse({summary:"",decisions:[{id:"d",question:"补充凭证？",claimIds:["c"]}]})];
+    store.saveTask(t);
+    expect(store.decision(t.id,{id:"d",value:"accepted",reason:"已补充"}).step).toBe(6);
+  });
   it("persists across reopen, deduplicates requests and prevents competing tasks",()=>{
     const first=create();expect(create().id).toBe(first.id);
     expect(()=>store.createTask("case1",{goal:"另一任务",idempotencyKey:"two"})).toThrow("未结束");

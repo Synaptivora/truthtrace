@@ -4,9 +4,9 @@ import { resolve, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { AnalysisResultSchema, EvidenceSchema, type Evidence } from "../contracts";
 import { z } from "zod";
-import { TaskInputSchema, type Task, type Segment } from "./contracts";
+import { TaskInputSchema, taskStages, type Task, type Segment } from "./contracts";
 
-export const CaseSchema = z.object({ caseId: z.string().min(1).default(() => randomUUID()), caseName: z.string().optional(), evidence: z.array(EvidenceSchema), analysis: AnalysisResultSchema, reviewNotes: z.record(z.string(), z.string()).optional(), notice: z.record(z.string(), z.unknown()).optional() });
+export const CaseSchema = z.object({ caseId: z.string().min(1).default(() => randomUUID()), caseName: z.string().optional(), goal: z.string().max(4000).optional(), evidence: z.array(EvidenceSchema), analysis: AnalysisResultSchema, reviewNotes: z.record(z.string(), z.string()).optional(), notice: z.record(z.string(), z.unknown()).optional() });
 export type SavedCase = z.infer<typeof CaseSchema>;
 export function dataDir() { return resolve(/* turbopackIgnore: true */ process.env.TRUTHTRACE_DATA_DIR || ".truthtrace"); }
 export function saveOriginal(bytes:Uint8Array) {
@@ -20,12 +20,16 @@ export class Store {
     mkdirSync(join(directory, "objects"), { recursive: true });
     this.db = new DatabaseSync(join(directory, "cases.sqlite"));
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
+      CREATE TABLE IF NOT EXISTS worker_health(id TEXT PRIMARY KEY, updated INTEGER);
       CREATE TABLE IF NOT EXISTS cases(id TEXT PRIMARY KEY, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS evidence(case_id TEXT, id TEXT, version INTEGER, hash TEXT, body TEXT, PRIMARY KEY(case_id,id,version));
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, case_id TEXT, idem TEXT, state TEXT, lease INTEGER, owner TEXT, body TEXT, UNIQUE(case_id,idem));
       CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT, at TEXT, body TEXT);
       CREATE TABLE IF NOT EXISTS reports(task_id TEXT, revision INTEGER, body TEXT, PRIMARY KEY(task_id,revision));`);
   }
+  workerHeartbeat(id:string) { this.db.prepare("INSERT INTO worker_health VALUES(?,?) ON CONFLICT(id) DO UPDATE SET updated=excluded.updated").run(id,Date.now()); }
+  workerReady() {return !!this.db.prepare("SELECT id FROM worker_health WHERE updated>? LIMIT 1").get(Date.now()-10000);}
+  removeWorker(id:string) {this.db.prepare("DELETE FROM worker_health WHERE id=?").run(id);}
   transaction<T>(fn: () => T): T { this.db.exec("BEGIN IMMEDIATE"); try { const result = fn(); this.db.exec("COMMIT"); return result; } catch (e) { this.db.exec("ROLLBACK"); throw e; } }
   cases(): SavedCase[] { return (this.db.prepare("SELECT body FROM cases").all() as {body:string}[]).map(r => JSON.parse(r.body)); }
   case(id: string): SavedCase { const row = this.db.prepare("SELECT body FROM cases WHERE id=?").get(id) as {body:string} | undefined; if (!row) throw new Error("案件不存在"); return JSON.parse(row.body); }
@@ -68,7 +72,7 @@ export class Store {
       const existing = this.db.prepare("SELECT id FROM tasks WHERE case_id=? AND idem=?").get(caseId,data.idempotencyKey) as {id:string}|undefined;
       if(existing) return this.task(existing.id);
       if(this.tasks(caseId).some(t=>["queued","running","waiting_user","paused"].includes(t.state))) throw new Error("本案已有未结束调查，请先继续或取消该任务");
-      const task: Task = {id:randomUUID(),caseId,goal:data.goal,scope:data.scope,state:"queued",step:0,revision:1,modelCalls:0,toolCalls:0,activeMs:0,error:"",snapshot:this.snapshot(caseId),artifacts:[],reads:[],decisions:[],createdAt:new Date().toISOString(),lease:0,owner:""};
+      const task: Task = {id:randomUUID(),caseId,goal:data.goal,mode:data.mode,scope:data.scope,state:"queued",step:0,revision:1,modelCalls:0,toolCalls:0,activeMs:0,error:"",snapshot:this.snapshot(caseId),artifacts:[],reads:[],decisions:[],createdAt:new Date().toISOString(),lease:0,owner:""};
       this.db.prepare("INSERT INTO tasks VALUES(?,?,?,?,?,?,?)").run(task.id,caseId,data.idempotencyKey,task.state,0,"",JSON.stringify(task));
       this.event(task.id,{type:"created"}); return task;
     });
@@ -92,13 +96,14 @@ export class Store {
       if(action==="pause" && ["running","queued","waiting_user"].includes(t.state)) t.state="paused";
       else if(action==="cancel" && t.state!=="completed") t.state="cancelled";
       else if(["resume","retry"].includes(action) && ["paused","failed","waiting_user"].includes(t.state)) { t.state="queued"; t.error=""; }
-      else if(action==="revise" && t.state!=="running") { t.goal=goal?.trim()||t.goal; t.snapshot=this.snapshot(t.caseId); t.artifacts=[]; t.reads=[]; t.step=0; t.revision++; t.modelCalls=0;t.toolCalls=0;t.activeMs=0;t.collectedSources=0;t.collectionNotes=[];t.error="";t.state="queued"; }
+      else if(action==="revise") { if(this.tasks(t.caseId).some(other=>other.id!==t.id&&["queued","running","waiting_user","paused"].includes(other.state)))throw new Error("本案已有其他正在进行的调查"); t.goal=goal?.trim()||t.goal; t.snapshot=this.snapshot(t.caseId); t.artifacts=[]; t.reads=[]; t.step=0; t.revision++; t.modelCalls=0;t.toolCalls=0;t.activeMs=0;t.collectedSources=0;t.collectionNotes=[];t.error="";t.state="queued"; }
       else throw new Error("当前状态不支持此操作");
       t.owner=""; t.lease=0; this.saveTask(t);this.event(id,{type:"action",action});return t;
     });
   }
   decision(id:string,decision:{id:string;value:string;reason:string}) {
-    return this.transaction(()=>{const t=this.task(id);if(t.state==="running")throw new Error("请先暂停调查，再提交判断");if(!t.artifacts.some(a=>a.decisions.some(d=>d.id===decision.id))) throw new Error("决定项不存在"); t.decisions.push({...decision,at:new Date().toISOString()});t.artifacts=t.artifacts.slice(0,3);t.step=3;t.revision++;t.state="queued";t.owner="";t.lease=0; this.saveTask(t); this.event(id,{type:"decision",...decision}); return t;});
+    return this.transaction(()=>{const t=this.task(id);if(t.state==="running")throw new Error("请先暂停调查，再提交判断");if(!t.artifacts.some(a=>a.decisions.some(d=>d.id===decision.id))) throw new Error("决定项不存在"); t.decisions.push({...decision,at:new Date().toISOString()});t.artifacts=t.artifacts.slice(0,3);t.step=taskStages(t.mode).find(stage=>stage>=3)!;t.revision++;t.state="queued";t.owner="";t.lease=0; this.saveTask(t); this.event(id,{type:"decision",...decision}); return t;});
   }
   close() {this.db.close();}
 }
+

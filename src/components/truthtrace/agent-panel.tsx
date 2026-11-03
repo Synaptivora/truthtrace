@@ -8,15 +8,19 @@ import { providers, type Connection, type Protocol } from "@/lib/agent/providers
 import type { AgentEvent, AgentReply } from "@/lib/agent/contracts";
 import { McpGuide } from "./mcp-guide";
 import { AppSettings } from "./app-settings";
+import { InvestigatorPanel } from "./investigator-panel";
+import { analyzeFiles, type CaseAnalysis } from "./api-client";
+import type { ChannelId } from "./channel-import";
+import type { InvestigationMode } from "@/lib/investigator/contracts";
 
-export type AgentContext = { evidence: Evidence[]; analysis?: AnalysisResult; caseName?: string; caseId?: string };
+export type AgentContext = { evidence: Evidence[]; analysis?: AnalysisResult; caseName?: string; caseId?: string; goal?: string };
 type Turn = { role: "user" | "assistant"; content: string; reply?: AgentReply };
 type Mode = "server" | "demo" | "custom";
 const initialConnection: Connection = { provider: "openai", protocol: "openai", baseUrl: providers[0].baseUrl, model: "", apiKey: "", tools: true };
 
-export function AgentPanel({ context }: { context: AgentContext | null }) {
+export function AgentPanel({ context, onReady, onChannel }: { context: AgentContext | null; onReady:(result:CaseAnalysis)=>Promise<void>; onChannel:(channel:ChannelId,goal:string)=>void }) {
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<"chat" | "connection" | "model">("chat");
+  const [view, setView] = useState<"chat" | "connection" | "model" | "settings" | "materials" | "investigation">("chat");
   const [mode, setMode] = useState<Mode>("server");
   const [connection, setConnection] = useState<Connection>(initialConnection);
   const [threads, setThreads] = useState<Record<string, Turn[]>>({});
@@ -29,6 +33,39 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
   const testRequest = useRef<AbortController | null>(null);
   const panel = useRef<HTMLElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
+  const [goal,setGoal]=useState("");
+  const [routeMode,setRouteMode]=useState<InvestigationMode>();
+  const [routeReason,setRouteReason]=useState("");
+  const [materialBusy,setMaterialBusy]=useState(false),[materialError,setMaterialError]=useState("");
+  const upload=useRef<HTMLInputElement>(null);
+  const returnTo=useRef<"chat"|"investigation">("chat");
+  const routeRef=useRef<(goal:string,signal?:AbortSignal,force?:boolean)=>Promise<boolean>>(async()=>false);
+  async function routeGoal(text:string, signal?:AbortSignal, force=false){
+    const response=await fetch("/api/assistant/intent",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({goal:text.slice(0,4000),hasEvidence:!!context?.evidence.length}),signal});
+    if(!response.ok){if(force)throw new Error("意图识别暂不可用");return false;}
+    const route=await response.json();
+    if(signal?.aborted)return false;
+    if(route.action==="chat"&&!force)return false;
+    if(route.action!=="supplement"||!context?.goal)setGoal(text.slice(0,4000));else setGoal(context.goal);
+    setRouteMode(route.mode);setRouteReason(route.reason);setOpen(true);
+    setView(route.action==="supplement"||!context?.evidence.length?"materials":"investigation");
+    return true;
+  }
+  useEffect(()=>{routeRef.current=routeGoal;});
+  useEffect(()=>{
+    function handle(event:Event){const detail=(event as CustomEvent<{goal?:string;view?:"materials"|"investigation"}>).detail;
+      if(detail?.goal)void routeRef.current(detail.goal,undefined,true).catch(()=>{setGoal(detail.goal!);setOpen(true);setView("materials");});
+      else {setOpen(true);setView(detail?.view||"chat");}}
+    window.addEventListener("truthtrace:assistant",handle);return()=>window.removeEventListener("truthtrace:assistant",handle);
+  },[]);
+  useEffect(()=>{const timer=setTimeout(()=>{setGoal(context?.goal||"");if(context?.caseId&&context.goal){setOpen(true);setView("investigation");}else if(!context?.caseId)setView("chat");},0);return()=>clearTimeout(timer);},[context?.caseId,context?.goal]);
+  async function importFiles(files:File[]){if(!files.length)return;setMaterialBusy(true);setMaterialError("");try{
+    const next=await analyzeFiles(files,new AbortController().signal,()=>{},context?.evidence||[]);
+    await onReady({...next,caseId:context?.caseId,caseName:context?.caseName||goal.slice(0,60)||"新的调查",goal:goal||context?.goal});
+    setView("investigation");
+  }catch(e){setMaterialError((e as Error).message);}finally{setMaterialBusy(false);}}
+  function configure(draft:string){setGoal(draft);returnTo.current="investigation";setView("model");}
+  function supplement(channel?:ChannelId,draft=goal){setGoal(draft);if(channel)onChannel(channel,draft||context?.goal||"");else setView("materials");}
   const threadId = context?.caseId || context?.evidence.map(e => e.id).join("|") || "global";
   useEffect(() => {
     const controller = new AbortController();
@@ -60,16 +97,20 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
     catch { setProbe("保存失败，请检查本地服务。"); } finally { setTesting(false); }
   }
   return <>
-    <AppSettings />
     <button ref={launcher} className="agent-launcher" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-controls="agent-panel"><MessageCircle size={19} />和咪探长聊聊</button>
     {open && <aside id="agent-panel" className={`agent-panel agent-view-${view}`} ref={panel} tabIndex={-1} aria-label="Synapse · 咪探长" onKeyDown={e => { if (e.key === "Escape") close(); }}>
       <header className="agent-header"><div><strong>Synapse · 咪探长</strong><small>{context?.caseName || "全局助手 · 未选择案件"}</small></div><button onClick={close} aria-label="关闭助手"><X size={20} /></button></header>
       <nav className="agent-nav" aria-label="咪探长功能">
         <button type="button" aria-pressed={view === "chat"} onClick={() => setView("chat")}><MessageCircle size={17} />对话</button>
-        <button type="button" aria-pressed={view === "connection"} onClick={() => setView("connection")}><Cable size={17} />连接</button>
-        <button type="button" aria-pressed={view === "model"} onClick={() => setView("model")}><Settings size={17} />模型设置</button>
+        {context?.analysis&&<button type="button" aria-pressed={view === "investigation"} onClick={()=>setView("investigation")}>本次调查</button>}
+        <button type="button" aria-pressed={view === "materials"} onClick={()=>setView("materials")}>补充材料</button>
+        <button type="button" aria-pressed={["settings","model","connection"].includes(view)} onClick={()=>setView("settings")}><Settings size={17}/>设置</button>
       </nav>
-      {view === "connection" && <McpGuide onClose={() => setView("chat")} />}
+      <section hidden={view!=="settings"} className="agent-settings"><h2>连接与显示设置</h2><p>按当前需要配置，目标和材料会保留。</p><button onClick={()=>{returnTo.current=context?.analysis?"investigation":"chat";setView("model");}}>模型设置</button><button onClick={()=>setView("connection")}><Cable size={16}/>连接渠道</button><AppSettings embedded/></section>
+      {view === "materials"&&<section className="agent-settings"><h2>{context?"把新材料交给我":"先选与问题有关的材料"}</h2><p>{goal||context?.goal||"可以先输入目标，也可以直接添加材料。"}</p><p>导入后保留你的目标；已有调查会纳入新材料重新核查。</p><input ref={upload} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.json" onChange={e=>{void importFiles(Array.from(e.target.files||[]));e.target.value="";}}/><button disabled={materialBusy} onClick={()=>upload.current?.click()}>上传文件或截图</button><button disabled={materialBusy} onClick={()=>supplement("dingtalk")}>选择钉钉会话</button><button disabled={materialBusy} onClick={()=>supplement("wechat")}>选择微信会话</button>{materialBusy&&<p role="status">正在整理，原有材料和目标会保留…</p>}{materialError&&<p role="alert">{materialError}</p>}</section>}
+      {view === "investigation"&&context?.analysis&&<InvestigatorPanel key={context.caseId} context={{...context,analysis:context.analysis}} initialGoal={goal||context.goal} routedMode={routeMode} onGoalChange={value=>{setGoal(value);setRouteMode(undefined);}} onConfigure={configure} onSupplement={supplement}/>}
+      {view === "investigation"&&routeReason&&<small className="agent-route-note">{routeReason}</small>}
+      {view === "connection" && <McpGuide onClose={() => setView("settings")} />}
       {view === "model" && <section className="agent-settings" aria-label="模型连接设置">
         <div className="agent-section-title"><h2>模型设置</h2><p>选择咪探长使用的模型，也可以先用本地演示。</p></div>
         <label>连接方式<select aria-label="连接方式" value={mode} onChange={e => { testRequest.current?.abort(); setTesting(false); setMode(e.target.value as Mode); setProbe(""); }}><option value="server">使用已保存的模型</option><option value="custom">填写模型连接</option><option value="demo">本地演示 · 不调用模型</option></select></label>
@@ -88,14 +129,14 @@ export function AgentPanel({ context }: { context: AgentContext | null }) {
         </>}
         {(mode === "custom" || (mode === "server" && serverConfigured)) && <button className="agent-test" disabled={testing} onClick={() => void test()}>{testing ? "测试中…" : "测试连接（一次模型调用）"}</button>}
         {mode === "custom" && <><label>用于<select value={connectionRole} onChange={e=>setConnectionRole(e.target.value)}><option value="shared">对话、材料分析与调查</option><option value="chat">仅对话</option><option value="analysis">仅材料分析</option><option value="investigation">仅自主调查</option></select></label><button className="agent-test" disabled={testing || !connection.model.trim() || (connection.provider !== "ollama" && !connection.apiKey.trim())} onClick={() => void saveShared()}>{testing ? "验证并保存中…" : "验证并保存模型"}</button><p className="agent-settings-note">验证会调用模型。保存后，密钥加密存放在本机，不写入浏览器。</p></>}
-        {probe && <p className="agent-probe" role="status">{probe}</p>}
+        {probe && <p className="agent-probe" role="status">{probe}</p>}<button onClick={()=>setView(returnTo.current)}>返回并继续</button>
       </section>}
-      <div className="agent-chat" hidden={view !== "chat"}><ChatSession key={`${threadId}:${mode}:${connection.provider}:${connection.protocol}:${connection.model}:${connection.baseUrl}:${connection.tools}`} context={context} mode={mode} connection={connection} initialDraft={drafts[threadId] || ""} onDraft={draft => setDrafts(previous => ({ ...previous, [threadId]: draft }))} initialTurns={threads[threadId] || []} onTurns={turns => setThreads(previous => ({ ...previous, [threadId]: turns }))} /></div>
+      <div className="agent-chat" hidden={view !== "chat"}><ChatSession key={`${threadId}:${mode}:${connection.provider}:${connection.protocol}:${connection.model}:${connection.baseUrl}:${connection.tools}`} onIntent={routeGoal} context={context} mode={mode} connection={connection} initialDraft={drafts[threadId] || ""} onDraft={draft => setDrafts(previous => ({ ...previous, [threadId]: draft }))} initialTurns={threads[threadId] || []} onTurns={turns => setThreads(previous => ({ ...previous, [threadId]: turns }))} /></div>
     </aside>}
   </>;
 }
 
-function ChatSession({ context, mode, connection, initialTurns, onTurns, initialDraft, onDraft }: { context: AgentContext | null; mode: Mode; connection: Connection; initialTurns: Turn[]; onTurns: (turns: Turn[]) => void; initialDraft: string; onDraft: (draft: string) => void }) {
+function ChatSession({ onIntent, context, mode, connection, initialTurns, onTurns, initialDraft, onDraft }: { onIntent:(text:string,signal:AbortSignal)=>Promise<boolean>; context: AgentContext | null; mode: Mode; connection: Connection; initialTurns: Turn[]; onTurns: (turns: Turn[]) => void; initialDraft: string; onDraft: (draft: string) => void }) {
   const [turns, setTurns] = useState(initialTurns);
   const [allowImages, setAllowImages] = useState(false);
   const [draft, updateDraft] = useState(initialDraft);
@@ -116,6 +157,7 @@ function ChatSession({ context, mode, connection, initialTurns, onTurns, initial
     setBusy(true); setError(""); setStatus("正在准备对话");
     const history = [...turns, { role: "user" as const, content: question.trim() }].slice(-23);
     try {
+      if(await onIntent(question,controller.signal)){setDraft("");return;}
       const response = await fetch("/api/agent/chat", { method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowImages, messages: history.map(({ role, content }) => ({ role, content })), mode, ...(mode === "custom" ? { connection } : {}), evidence: context?.evidence.map(e => e.kind === "image" && !allowImages ? { ...e, content: "[图片像素未发送给对话助手]" } : e) ?? [], analysis: context?.analysis }) });
       if (!response.ok) { const data = await response.json(); throw new Error(data.error || "请求失败"); }
       const reader = response.body?.getReader(); if (!reader) throw new Error("未收到回复流。");
@@ -143,7 +185,7 @@ function ChatSession({ context, mode, connection, initialTurns, onTurns, initial
   return <>
     <div className="agent-scope"><span>{context ? `本案 ${context.evidence.length} 份材料` : "通用对话 · 不读取案件"} · {mode === "demo" ? "本地演示" : mode === "custom" ? connection.model || "未填写模型" : "已保存的模型"}</span><button aria-label="清空当前对话" disabled={busy} onClick={() => { save([]); setError(""); }}><Trash2 size={14} /></button></div>
     <div className="agent-messages" role="log" aria-label="对话记录">
-      {!turns.length && <div className="agent-welcome"><h3>从一个问题开始。</h3><p>{context ? "输入问题，回复会保留材料来源。" : "创建案件后，可以就材料提问。"}</p>{(context ? ["这句话出自哪份材料？"] : ["我该怎么创建案件？", "可以导入哪些材料？"]).map(q => <button key={q} disabled={busy} onClick={() => { setDraft(q); void send(q); }}>{q}</button>)}</div>}
+      {!turns.length && <div className="agent-welcome"><h3>从一个问题开始。</h3><p>{context ? "输入问题，回复会保留材料来源。" : "先告诉我想查清什么，我会帮你选择材料和下一步。"}</p>{(context ? ["这句话出自哪份材料？"] : ["我想查清退款承诺是否兑现", "我有一张截图想补充"]).map(q => <button key={q} disabled={busy} onClick={() => { setDraft(q); void send(q); }}>{q}</button>)}</div>}
       {turns.map((turn, index) => <article key={index} className={`agent-message ${turn.role}`}><strong>{turn.role === "user" ? "你" : "咪探长"}</strong><p>{turn.content}</p>{turn.reply && <><small>{turn.reply.mode === "demo" ? "本地演示 · 非模型判断" : `模型回复 · ${turn.reply.model}`}</small>{turn.reply.citations.length > 0 && <div className="agent-citations">{turn.reply.citations.map(c => <button key={c.id} onClick={() => setSource(context?.evidence.find(e => e.id === c.evidenceId) ?? null)} title={c.excerpt}>[{c.id}] {c.name} ↗</button>)}</div>}<details><summary>来源与处理方式</summary><ul>{turn.reply.steps.map((s, i) => <li key={i}>{s}</li>)}</ul><p>引用表示读取过的来源，不代表事实已经核实。</p></details></>}</article>)}
       {busy && <div className="agent-progress" role="status">{status}</div>}<div ref={end} />
     </div>

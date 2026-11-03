@@ -16,7 +16,8 @@
     "start:local": "node scripts/local.mjs --production",
     "setup": "node scripts/setup.mjs",
     "setup:check": "node scripts/setup.mjs --check",
-    "test:investigator": "node scripts/investigator-smoke.mjs"
+    "test:investigator": "node scripts/investigator-smoke.mjs",
+    "test:journey": "node scripts/channel-journey-smoke.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",
