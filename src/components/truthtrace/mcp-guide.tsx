@@ -233,17 +233,15 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
   const dupError = Boolean(status?.error) && status?.error === notice;
 
   return (
-    <section className="mcp-guide" aria-label="数据源 MCP 配置">
+    <section className="mcp-guide" aria-label="聊天来源连接">
       <header className="mcp-head">
         <button onClick={onClose} aria-label="返回对话"><ArrowLeft size={18} /></button>
-        <div><strong>数据源 MCP 配置</strong><small>A → C 渠道工具接入</small></div>
+        <div><strong>聊天来源</strong><small>微信、钉钉与飞书</small></div>
       </header>
 
       <div className="mcp-body">
         <p className="mcp-lead">
-          把微信 / 钉钉 / 飞书的取数工具接到这里。A 端已冻结的 <code>/source/*</code> 接口已通过 <code>/api/source/*</code> 在本界面接通。
-          下面的「已就绪 / 待授权」是 A 端现场探测的结果（<code>dws auth status</code>、真开一次微信库、<code>lark-cli auth status</code>），
-          不是写死的演示状态；点「检测连接」会强制重新探一次。
+          先配置本机工具，再完成账号授权。下方显示各聊天来源的当前连接状态；状态变化后，点击「检测连接」刷新。
         </p>
 
         {notice && <p className="mcp-notice" role="status">{notice}</p>}
