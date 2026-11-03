@@ -21,6 +21,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -88,7 +89,7 @@ def post(file_path, extra=None, timeout=180):
 
 
 def get(url):
-    with urllib.request.urlopen(url, timeout=60) as r:
+    with urllib.request.urlopen(urllib.parse.urljoin(BASE, url), timeout=60) as r:
         return r.status, r.read()
 
 
@@ -183,3 +184,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
