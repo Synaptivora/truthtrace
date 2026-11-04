@@ -10,7 +10,7 @@ import type { Evidence } from "@/lib/contracts";
  *     并把 `/files/<id>` 与 `http(s)://…/files/<id>` 一律收敛到同源 `/api/files/<id>`。
  *  2) 聊天正文里的内联标记 `[图片@t: 名 见独立证据]` 只是一行字 → 这里换成 chip，
  *     点了直接打开那张独立图片证据（找不到就置灰并说明原因）。
- * 标记与证据名同源（都来自 A 的 media_list），所以按名精确匹配是可靠的。
+ * 旧标记没有稳定 ID 时仅接受唯一同名候选；重名必须由用户选择。
  */
 
 const BRACKET = /\[([^[\]]+)\]/g;
@@ -69,10 +69,13 @@ function renderChatLine(line: string, key: string, all: Evidence[], onOpen?: (id
     if (!marker) continue;
     if (matched.index > last) nodes.push(...linkify(line.slice(last, matched.index), `${key}-t${nodes.length}`));
 
-    const target = marker.name
-      ? all.find(item => item.name === marker.name)
-        ?? all.find(item => item.name.startsWith(marker.name as string))
-      : undefined;
+    const candidates = marker.name ? all.filter(item => item.name === marker.name) : [];
+    const target = candidates.length === 1 ? candidates[0] : undefined;
+    if (candidates.length > 1) {
+      nodes.push(<details key={`${key}-ambiguous${nodes.length}`}><summary>{marker.label}：{marker.name}（{candidates.length} 个候选，请核对来源）</summary>{candidates.map(item => <button type="button" key={item.id} onClick={() => onOpen?.(item.id)}>{item.name} · {item.source} · {item.id}</button>)}</details>);
+      last = matched.index + matched[0].length;
+      continue;
+    }
     nodes.push(
       <button
         key={`${key}-m${nodes.length}`}
