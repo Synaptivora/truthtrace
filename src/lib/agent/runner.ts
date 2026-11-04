@@ -1,3 +1,7 @@
+import { DatabaseSync } from "node:sqlite";
+import { randomUUID } from "node:crypto";
+import { EvidenceIndex } from "../search";
+import { segmentEvidence, type IndexedSegment } from "../evidence-index/segments";
 import { createEvidenceRef, type EvidenceContext } from "../evidence/provenance";
 import { z } from "zod";
 import type { AgentRequest, AgentReply, Citation } from "./contracts";
@@ -5,7 +9,7 @@ import { effectiveConnection as resolveConnection } from "../investigator/connec
 import { modelStep, type Message, type Tool } from "./transport";
 
 export const agentTools: Tool[] = [
-  { name: "search_evidence", description: "在当前案件文本中按关键词检索原文。中文建议使用短关键词。", parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false } },
+  { name: "search_evidence", description: "在当前案件已授权版本中按中文关键词及明确同义词检索。返回候选而非已读取依据；引用前必须调用 read_evidence。", parameters: { type: "object", properties: { query: { type: "string" }, offset: {type:"integer",minimum:0} }, required: ["query"], additionalProperties: false } },
   { name: "read_evidence", description: "读取指定证据的文本片段，每次最多 6000 字，可用 offset 继续读取。图片在用户启用视觉时附加像素，否则只返回元信息。", parameters: { type: "object", properties: { id: { type: "string" }, offset: { type: "integer", minimum: 0 } }, required: ["id"], additionalProperties: false } },
   { name: "case_overview", description: "读取当前已有分析摘要、时间线、疑点与补证建议；这些是待核查的分析而非事实。", parameters: { type: "object", properties: {}, additionalProperties: false } },
 ];
@@ -36,12 +40,18 @@ export function makeTools(request: AgentRequest, evidenceContext?:EvidenceContex
     return source.content;
   }, catalog: sources.map(e => ({ id: e.label, name: e.name, kind: e.kind })), execute(name: string, args: unknown): unknown {
     if (name === "search_evidence") {
-      const { query } = z.object({ query: z.string().trim().min(1).max(200) }).strict().parse(args);
-      const terms = query.toLocaleLowerCase().split(/\s+/);
-      return sources.filter(e => e.kind !== "image" && terms.some(t => (e.name + e.content).toLocaleLowerCase().includes(t))).slice(0, 5).map(e => {
-        const hits = terms.map(t => e.content.toLocaleLowerCase().indexOf(t)).filter(i => i >= 0);
-        return excerpt(e, Math.max(0, (hits.length ? Math.min(...hits) : 0) - 150));
-      });
+      const { query, offset } = z.object({ query: z.string().trim().min(1).max(200),offset:z.number().int().min(0).default(0) }).strict().parse(args);
+      const db=new DatabaseSync(":memory:");
+      try {
+        const index=new EvidenceIndex(db);
+        const temporaryCase=`temporary:${randomUUID()}`;
+        const segments:IndexedSegment[]=evidenceContext?evidenceContext.segments.filter(s=>s.kind!=="image"&&sources.some(e=>e.id===s.evidenceId)).map(s=>({...s,caseId:evidenceContext.caseId,source:sources.find(e=>e.id===s.evidenceId)?.source??"",page:null,messageId:null})):
+          sources.flatMap(e=>segmentEvidence({caseId:temporaryCase,evidenceId:e.id,version:1,kind:e.kind,content:e.content,source:e.source}));
+        const grants=[...new Map(segments.map(s=>[JSON.stringify([s.caseId,s.evidenceId,s.version]),{caseId:s.caseId,evidenceId:s.evidenceId,version:s.version}])).values()];
+        for(const grant of grants)index.replaceVersion(grant,segments.filter(s=>s.caseId===grant.caseId&&s.evidenceId===grant.evidenceId&&s.version===grant.version));
+        const result=index.search(query,{authorizedVersions:grants,topK:5,offset,expand:true});
+        return {total:result.total,nextOffset:result.nextOffset,queries:result.queries,coverage:result.coverage,note:"检索命中不等于已读取。临时材料的索引标识仅在内存中使用，不代表已归档版本。",hits:result.hits.map(hit=>({id:sources.find(e=>e.id===hit.evidenceId)!.label,name:sources.find(e=>e.id===hit.evidenceId)!.name,offset:hit.start,preview:hit.content.slice(0,100)}))};
+      } finally {db.close();}
     }
     if (name === "read_evidence") {
       const { id, offset } = z.object({ id: z.string(), offset: z.number().int().min(0).default(0) }).strict().parse(args);
@@ -49,7 +59,7 @@ export function makeTools(request: AgentRequest, evidenceContext?:EvidenceContex
       if (!source) return { error: "不存在的证据，请从目录选择。" };
       return excerpt(source, offset);
     }
-    if (name === "case_overview") return request.analysis ? { ...request.analysis, note: "已有分析，仅作待核查线索。mock 为模拟结果。" } : { note: "尚无案件分析。" };
+    if (name === "case_overview") { z.object({}).strict().parse(args); return request.analysis ? { ...request.analysis, note: "已有分析，仅作待核查线索。mock 为模拟结果。" } : { note: "尚无案件分析。" }; }
     return { error: "不支持的工具；只能检索、读取当前材料和查看已有分析。" };
   } };
 }
@@ -64,7 +74,8 @@ export async function runAgent(request: AgentRequest, signal: AbortSignal, statu
     signal.throwIfAborted();
     report("本地演示：检索当前材料，不调用模型");
     const question = request.messages.at(-1)!.content;
-    context.execute("search_evidence", { query: question });
+    const found=context.execute("search_evidence", { query: question }) as {hits:{id:string;offset:number}[]};
+    for(const hit of found.hits)context.execute("read_evidence",{id:hit.id,offset:hit.offset});
     const citations = [...context.seen.values()];
     return { mode: "demo", steps, citations, coverage:context.coverage(),sourceSupport:"unchecked",factualVerification:"not_checked", text: citations.length ? `演示模式找到了 ${citations.length} 份相关材料：\n\n${citations.map(c => `[${c.id}] ${c.name}\n${c.excerpt}`).join("\n\n")}\n\n以上是原文摘录，不是模型判断。配置模型后可连续追问、对照证据和提出补证建议。` : request.evidence.length ? "当前为本地演示模式，没有匹配到原文。可以用材料中的短关键词重试；需要理解问题、总结或推理，请在模型设置中连接模型。" : "你好，我是咪探长。你可以先创建案件并上传材料，再让我查找原文、梳理时间线、对比说法或建议下一步补证。当前为演示模式；打开模型设置、填写连接并测试后，就能直接聊天。" };
   }
