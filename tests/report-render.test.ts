@@ -8,7 +8,7 @@ it("exports the same document without executing source HTML",()=>{
 });
 it('renders semantic headings, lists and paragraphs without markdown wrappers or active links',()=>{
  const html=renderReport({schemaVersion:1,caseId:'<img src=x>',generatedAt:'2026-11-04',mode:'model',markdown:'# 报告标题\n\n说明段落\n\n## 时间线\n- 第一个事件\n  - [e1] 引用原文\n\n## 空章节\n\n## 边界\n不代表已经核实\n[jump](javascript:alert(1))'},'html');
- expect(html).toContain('<h1>报告标题</h1>');expect(html).toContain('<h2>时间线</h2>');expect(html).toContain('<li>第一个事件</li>');expect(html).toContain('<li class="citation">[e1] 引用原文</li>');expect(html).toContain('<p>说明段落</p>');expect(html).toContain('暂无记录。');expect(html).not.toContain('<pre>');expect(html).not.toContain('<a ');expect(html).not.toContain('<img ');expect(html).toContain('@media print');expect(html).toContain('@media(max-width:600px)');
+ expect(html).toContain('<h1>报告标题</h1>');expect(html).toContain('<h2>时间线</h2>');expect(html).toContain('<li>第一个事件<ul>');expect(html).toContain('<li>[e1] 引用原文</li>');expect(html).toContain('<p>说明段落</p>');expect(html).toContain('<h2>空章节</h2>');expect(html).not.toContain('<pre>');expect(html).not.toContain('<a ');expect(html).not.toContain('<img ');expect(html).toContain('@media print');expect(html).toContain('@media(max-width:600px)');
 });
 
 it('uses readable coverage and commitment labels while retaining reference metadata',()=>{

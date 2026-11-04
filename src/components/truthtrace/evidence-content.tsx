@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
+import { MarkdownContent } from "./markdown-content";
 import type { Evidence } from "@/lib/contracts";
 
 /**
@@ -120,12 +121,17 @@ export function EvidenceContent({
   onOpen?: (id: string) => void;
   highlight?: {start:number;end:number;quote:string};
 }) {
+  const [raw, setRaw] = useState(false);
   const mark=useRef<HTMLElement>(null);
   useEffect(()=>{mark.current?.scrollIntoView({block:"center"});},[highlight]);
   const valid=highlight&&highlight.start>=0&&highlight.end<=item.content.length&&item.content.slice(highlight.start,highlight.end)===highlight.quote;
   const chat = item.kind === "chat";
   const blocks = chat ? parseChatTranscript(item.content) : [];
   if(valid&&highlight)return <pre className="evidence-content" style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{item.content.slice(0,highlight.start)}<mark ref={mark}>{item.content.slice(highlight.start,highlight.end)}</mark>{item.content.slice(highlight.end)}</pre>;
+  if (!chat && (/\.md(?:own)?$/i.test(item.name) || item.mimeType === "text/markdown")) return <section className="evidence-document">
+    <nav aria-label="材料显示方式"><button type="button" aria-pressed={!raw} onClick={()=>setRaw(false)}>排版阅读</button><button type="button" aria-pressed={raw} onClick={()=>setRaw(true)}>原始文本</button><small>仅调整显示，原文与引用位置保持不变</small></nav>
+    {raw?<pre className="evidence-raw">{item.content}</pre>:<MarkdownContent text={item.content}/>}
+  </section>;
   if (blocks.some(block => block.type === "message")) {
     return <div className="evidence-content evidence-chat-transcript" aria-label="聊天原文">
       {blocks.map((block, index) => {

@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { safeError } from './safe-error';
+import { requestBodyLimit } from '../request-limits';
 
 export function localSecret(name = 'TRUTHTRACE_SESSION_SECRET'): string {
   const configured = process.env[name];
@@ -52,7 +53,7 @@ export function secureRoute(handler:(request:Request)=>Promise<Response>):(reque
 export function secureRoute<C>(handler:(request:Request,context:C)=>Promise<Response>):(request:Request,context:C)=>Promise<Response>;
 export function secureRoute<C>(handler: (request: Request, context: C) => Promise<Response>) {
   return async (request: Request, context: C): Promise<Response> => {
-    const fail = (status:number) => Response.json({error:status===413?'请求体超过限制':'请求未获允许或处理失败',code:`HTTP_${status}`,traceId:randomBytes(8).toString('hex'),retryable:status===429},{status,headers:{'Cache-Control':'no-store'}});
+    const fail = (status:number) => Response.json({error:status===413?`请求体超过 ${requestBodyLimit(new URL(request.url).pathname,request.headers.get('content-type')||'')/1024/1024} MiB；请缩短时间范围或减少图片、附件后分批导入。已保存材料不受影响。`:'请求未获允许或处理失败',code:`HTTP_${status}`,traceId:randomBytes(8).toString('hex'),retryable:status===429},{status,headers:{'Cache-Control':'no-store'}});
     let reserved=0;let acquired=false;
     const release=()=>{if(acquired){activeRequests--;reservedBytes-=reserved;acquired=false;}};
     try {
@@ -61,7 +62,7 @@ export function secureRoute<C>(handler: (request: Request, context: C) => Promis
       if (!window || now-window.time>60_000) { window={time:now,count:0}; windows.set(key,window); }
       if (++window.count>600) return fail(429);
       const pathname=new URL(request.url).pathname;
-      const limit = pathname.startsWith('/api/cases') || request.headers.get('content-type')?.includes('multipart/form-data') ? 25*1024*1024 : 2*1024*1024;
+      const limit = requestBodyLimit(pathname,request.headers.get('content-type')||'');
       const length=request.headers.get('content-length');
       if (length && (!/^\d+$/.test(length) || Number(length)>limit)) return fail(413);
       reserved=request.body?limit*3:0;

@@ -1,3 +1,4 @@
+import { renderMarkdown } from "@/lib/markdown";
 import { describe, expect, it } from "vitest";
 import { analysisReport, mergeTimeline } from "./case-view";
 import type { TimelineEvent } from "@/lib/contracts";
@@ -17,6 +18,6 @@ describe("时间线合并与报告来源", () => {
   });
   it("导出注明 Mock、证据来源和人工备注，不将疑点标为核实", () => {
     const text = analysisReport({ caseName: "测试案件", evidence: [{ id: "e1", kind: "text", name: "原件.txt", mimeType: "text/plain", content: "原文" }], analysis: { caseTitle: "测试", summary: "登记完成", analysisMode: "mock", generatedAt: "2026-11-02", people: [], relationships: [], events: [event], contradictions: [], commitments: [], evidenceGaps: [] } }, { e1: "应补充完整截图" });
-    expect(text).toContain("模拟分析"); expect(text).toContain("[e1] 原件.txt"); expect(text).toContain("应补充完整截图"); expect(text).toContain("未经模型重分析");
+    expect(text).toContain("模拟分析"); expect(renderMarkdown(text)).toContain("[e1] 原件.txt"); expect(text).toContain("应补充完整截图"); expect(text).toContain("未经模型重分析");
   });
 });

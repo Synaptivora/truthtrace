@@ -55,7 +55,7 @@ export function AppSettings({embedded=false}:{embedded?:boolean}) {
       <header><h2>应用设置</h2><button type="button" onClick={close} aria-label="关闭应用设置"><X size={18} /></button></header>
       <div className="app-setting-row"><div><strong>模型连接</strong><small>用于材料分析、对话与自主调查</small></div><button type="button" className="app-model-link" onClick={() => { setOpen(false); window.dispatchEvent(new Event("truthtrace:configure-model")); }}>配置模型 →</button></div>
       <div className="app-setting-row"><div><strong>界面语言</strong><small>当前版本提供简体中文</small></div><span>简体中文</span></div>
-      <label className="app-setting-row"><div><strong>咪探长面板字号</strong><small>调整对话和配置页的文字大小</small></div><select value={preferences.text} onChange={event => update({ ...preferences, text: event.target.value as Preferences["text"] })}><option value="standard">标准</option><option value="large">较大</option></select></label>
+      <label className="app-setting-row"><div><strong>阅读字号</strong><small>调整对话、材料和工作台正文的文字大小</small></div><select value={preferences.text} onChange={event => update({ ...preferences, text: event.target.value as Preferences["text"] })}><option value="standard">标准</option><option value="large">较大</option></select></label>
       <label className="app-setting-row"><div><strong>减少动态效果</strong><small>关闭装饰动画和过渡效果</small></div><input type="checkbox" role="switch" checked={preferences.reduceMotion} onChange={event => update({ ...preferences, reduceMotion: event.target.checked })} /></label>
       <p role={notice ? "status" : undefined}>{notice || "偏好保存在当前浏览器。"}</p>
     </section>}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { materialRequestBody } from "@/lib/request-limits";
 import { RefreshCw } from "lucide-react";
 import { AnalysisResultSchema, EvidenceSchema } from "@/lib/contracts";
 import { describeEmptyImport } from "./api-client";
@@ -135,7 +136,7 @@ async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): P
   const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: path === "/api/analyze" ? materialRequestBody(body) : JSON.stringify(body),
     signal,
   });
   return readJson<T>(response, "请求失败，请稍后重试");
