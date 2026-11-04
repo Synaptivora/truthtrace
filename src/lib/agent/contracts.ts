@@ -5,6 +5,8 @@ import { ConnectionSchema } from "./providers";
 export const ChatMessageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string().trim().min(1).max(12000) });
 export const AgentRequestSchema = z.object({
   caseId:z.string().min(1).max(200).optional(),
+  conversationId:z.string().uuid().optional(),
+  conversationRevision:z.number().int().positive().optional(),
   messages: z.array(ChatMessageSchema).min(1).max(24).refine(m => m.at(-1)?.role === "user", "最后一条必须为用户问题"),
   evidence: z.array(EvidenceSchema).max(30).default([]).refine(e => new Set(e.map(x => x.id)).size === e.length, "证据 ID 重复"),
   analysis: AnalysisResultSchema.optional(),
