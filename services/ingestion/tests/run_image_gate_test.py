@@ -13,6 +13,7 @@ import base64
 import subprocess
 import tempfile
 import urllib.request
+import security_test_auth
 import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))

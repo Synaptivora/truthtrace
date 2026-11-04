@@ -50,7 +50,7 @@ import mimetypes
 import io
 from email.parser import BytesParser
 from email.policy import default
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as _ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, quote
 
 # 默认不设单文件体积上限；MAX_CONTENT_SIZE > 0 时启用以下可选策略。
@@ -1152,21 +1152,41 @@ def save_upload(data: bytes, filename: str) -> str:
     变成非 ASCII 字符串——浏览器会自动转义，但 HTTP 客户端和模型转述时极易断链。
     原始文件名写进同名 .name 旁注文件，下载时再还原。
     """
+    import time
+    from pathlib import Path
+    root = Path(UPLOAD_DIR).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    lock = root / ".archive.lock"
     try:
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        raise ValueError("Archive busy")
+    try:
+        total = 0
+        for item in root.iterdir():
+            if item == lock:
+                continue
+            if item.is_symlink():
+                raise ValueError("Unsafe archive entry")
+            if item.is_file():
+                stat = item.stat()
+                if re.fullmatch(r"[0-9a-f]{12}(\.[A-Za-z0-9]{1,10})?(\.name)?", item.name) and time.time() - stat.st_mtime > 7 * 86400:
+                    item.unlink()
+                else:
+                    total += stat.st_size
+        if total + len(data or b"") + len((filename or "").encode("utf-8")) > 250 * 1024 * 1024:
+            raise ValueError("Archive quota exceeded")
         ext = re.sub(r"[^a-z0-9]", "", os.path.splitext(filename or "")[1].lower())[:10]
-        stored = f"{uuid.uuid4().hex[:12]}" + (f".{ext}" if ext else "")
-        fp = os.path.join(UPLOAD_DIR, stored)
-        with open(fp, "wb") as f:
-            f.write(data or b"")
-        try:
-            with open(fp + ".name", "w", encoding="utf-8") as f:
-                f.write(filename or stored)
-        except Exception:
-            pass
+        stored = uuid.uuid4().hex[:12] + ("." + ext if ext else "")
+        target = root / stored
+        with target.open("xb") as output:
+            output.write(data or b"")
+        with (root / (stored + ".name")).open("x", encoding="utf-8") as output:
+            output.write(filename or stored)
         return stored
-    except Exception:
-        return ""
+    finally:
+        os.close(descriptor)
+        lock.unlink()
 
 
 def oversize_evidence(filename, mime, data: bytes, origin: str | None = None,
@@ -1251,13 +1271,21 @@ def build_evidence(filename, mime, data: bytes, origin: str | None = None,
                 raise ValueError("Archive resource limit")
     if data.startswith(b"%PDF"):
         from pypdf import PdfReader
-        if len(PdfReader(io.BytesIO(data)).pages) > 500:
+        from pypdf.errors import PdfReadError
+        try:
+            pages = len(PdfReader(io.BytesIO(data)).pages)
+        except PdfReadError:
+            pages = 0  # Existing parser returns an explicit unreadable-material notice.
+        if pages > 500:
             raise ValueError("PDF page limit")
     if (mime or "").startswith("image/"):
-        from PIL import Image
-        with Image.open(io.BytesIO(data)) as image:
-            if image.width * image.height > 25000000:
-                raise ValueError("Image pixel limit")
+        from PIL import Image, UnidentifiedImageError
+        try:
+            with Image.open(io.BytesIO(data)) as image:
+                if image.width * image.height > 25000000:
+                    raise ValueError("Image pixel limit")
+        except UnidentifiedImageError:
+            pass  # Existing normalization explicitly marks unsupported media as unreadable.
     # MIME 不可靠时按魔数兜底（否则 PDF 会被当文本，二进制倒进 content）。
     # 放在闸门之前，是因为闸门要按类型决定适不适用——判断类型需要可靠的 MIME。
     if (mime or "").lower() in ("", "application/octet-stream", "binary/octet-stream"):
@@ -1337,6 +1365,40 @@ import secrets
 
 REQUEST_LIMIT = min(int(os.environ.get("TRUTHTRACE_REQUEST_LIMIT", 25 * 1024 * 1024)), 25 * 1024 * 1024)
 REQUEST_SLOTS = threading.BoundedSemaphore(4)
+
+class ThreadingHTTPServer(_ThreadingHTTPServer):
+    daemon_threads = True
+    def __init__(self, *args, **kwargs):
+        self._connection_slots = threading.BoundedSemaphore(16)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self._connection_slots.acquire(blocking=False):
+            request.close()
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._connection_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        request.settimeout(30)
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._connection_slots.release()
+
+
+def isolated_build_evidence(filename, mime, data, **kwargs):
+    import subprocess
+    payload = json.dumps({"filename": filename, "mime": mime, "data": base64.b64encode(data).decode("ascii"), "kwargs": kwargs})
+    code = "import server,json,sys,base64; p=json.load(sys.stdin); result=server.build_evidence(p['filename'],p['mime'],base64.b64decode(p['data']),**p['kwargs']); json.dump(result,sys.stdout,ensure_ascii=True)"
+    result = subprocess.run([sys.executable, "-X", "utf8", "-c", code], input=payload, capture_output=True, text=True, encoding="utf-8", cwd=os.path.dirname(os.path.abspath(__file__)), timeout=30)
+    if result.returncode:
+        raise ValueError("Parser rejected input")
+    return json.loads(result.stdout)
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -1444,7 +1506,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "非法的文件标识"}, 404)
             return
         fp = os.path.join(UPLOAD_DIR, safe)
-        if not os.path.isfile(fp):
+        if os.path.islink(fp) or not os.path.isfile(fp):
             self._send_json({"error": "文件不存在或已被清理"}, 404)
             return
 
@@ -1740,7 +1802,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "max_chars 必须是整数"}, 400)
             return
         try:
-            evidence = build_evidence(filename, mime, data, origin=q_source,
+            evidence = isolated_build_evidence(filename, mime, data, origin=q_source,
                                       max_chars=max_chars, page_range=q_pages,
                                       base_url=self._base_url())
         except RuntimeError as e:

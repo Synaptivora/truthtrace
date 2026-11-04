@@ -28,6 +28,7 @@ import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
+import security_test_auth
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -81,7 +82,7 @@ def validate_evidence(ev: dict) -> list:
 def main():
     tmp = tempfile.mkdtemp(prefix="srcapi_")
     env = dict(os.environ, UPLOAD_DIR=os.path.join(tmp, "_uploads"))
-    proc = subprocess.Popen([sys.executable, SERVER, "--port", str(PORT)],
+    proc = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "security_offline_server.py"), "--port", str(PORT)],
                             cwd=ROOT, env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
@@ -153,11 +154,11 @@ def main():
         req = urllib.request.Request(BASE + "/source/list", method="OPTIONS")
         with urllib.request.urlopen(req, timeout=10) as r:
             check("OPTIONS → 204", r.status == 204, str(r.status))
-            check("带 Access-Control-Allow-Origin",
-                  "Access-Control-Allow-Origin" in dict(r.headers),
+            check("默认无 Access-Control-Allow-Origin",
+                  "Access-Control-Allow-Origin" not in dict(r.headers),
                   dict(r.headers).get("Access-Control-Allow-Origin", ""))
         _, _, hdrs = get("/health")
-        check("普通 GET 也带 CORS 头", "Access-Control-Allow-Origin" in hdrs)
+        check("普通 GET 默认无 CORS 头", "Access-Control-Allow-Origin" not in hdrs)
 
         print("\n=== 8) 零回归：/parse 与 /parse_chat 不受影响 ===")
         txt = os.path.join(tmp, "聊天记录.txt")

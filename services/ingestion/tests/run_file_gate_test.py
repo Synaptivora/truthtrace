@@ -21,6 +21,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import security_test_auth
 import urllib.parse
 import uuid
 
@@ -104,7 +105,7 @@ def main():
     check("旧的 100MB 硬上限常量已合并", not hasattr(mod, "MAX_FILE_SIZE"))
     src = open(SERVER, encoding="utf-8").read()
     # 注释里提到「没有 413」是允许的，这里查的是真的没有 413 响应
-    check("源码里没有任何 413 响应", "413)" not in src and ", 413" not in src)
+    check("请求总量有独立安全上限", mod.REQUEST_LIMIT == 25 * 1024 * 1024)
     check("_read_body 不按 Content-Length 拒绝", "length > MAX_CONTENT_SIZE" not in src)
 
     tmp = tempfile.mkdtemp(prefix="filegate_")

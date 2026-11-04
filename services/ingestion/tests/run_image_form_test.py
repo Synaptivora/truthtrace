@@ -18,6 +18,7 @@ B 的 openai-compatible.ts 对 kind=image 一律：
 """
 import sys, os, threading, time, json, base64, uuid, mimetypes, io
 import urllib.request
+import security_test_auth
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

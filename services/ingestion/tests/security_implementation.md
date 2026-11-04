@@ -11,3 +11,13 @@ Validation: python -m py_compile services/ingestion/server.py passed; python -X 
 Unverified/blockers: CPU parsing hard timeout and process isolation; bounded HTTP accept/thread count; archive retention/cleanup and quota; dedicated 100 MiB archival path; symlink-based local storage tampering; complete channel HTTP regression with service-token updates; PDF/image dependency matrix. pypdf/Pillow are now required for PDF/image validation and absence fails closed. Existing anonymous HTTP tests require migration. Live source-list probing timed out after three seconds and encountered a GBK subprocess decode error; no live channel success is claimed. Real credentials, external models, and private materials were not used.
 
 Rollback: revert this commit together with dependent Next service-auth integration. No persistent schema migration. Do not deploy rollback publicly because it restores known unsafe boundaries.
+
+## Follow-up completion
+
+Added bounded connection handling (16 threads), isolated /parse interpreter processes with a 30-second subprocess timeout (Python kills and waits on timeout), archive exclusive cross-process lock, 250 MiB archive quota and seven-day cleanup limited to managed archive filenames. Stale lock after a killed writer fails closed and requires inspection/removal; it cannot bypass quota. Upload download rejects symlinks.
+
+Migrated existing HTTP regressions to test-only Bearer credentials. Updated obsolete no-413/default-wildcard assertions to the new security contract. Source HTTP tests run a dedicated fixture overriding real-channel probes: no installed user channel client is contacted. Existing mock sync and repository DingTalk/Feishu demo CLI tests remain.
+
+Validation: `python services/ingestion/tests/run_all.py`: 14 passed, 0 failed (38 seconds); `python -X utf8 services/ingestion/tests/security_boundary_test.py`: 8 passed. These are deterministic/local-fixture tests, not live channel or model evaluation.
+
+Remaining boundaries: /source operations retain in-process session state and are not hard-killed on CPU deadline; /parse_chat media work likewise still runs in-process. No OS memory sandbox or process-tree containment is claimed. Dedicated 100 MiB archive-only ingress remains unimplemented; requests above 25 MiB fail closed. Complete runtime isolation of stateful channel operations requires an explicit worker/session protocol and is deferred for architectural review rather than silently breaking channel continuity.
