@@ -1,3 +1,4 @@
+import { safeError } from "@/lib/security/safe-error";
 import { secureRoute } from "@/lib/security/boundary";
 import { AgentRequestSchema, type AgentEvent } from "@/lib/agent/contracts";
 import { runAgent } from "@/lib/agent/runner";
@@ -15,7 +16,7 @@ async function rawPOST(request: Request) {
     async start(controller) {
       function emit(event: AgentEvent) { if (!stop.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event) + "\n")); }
       try { const reply = await runAgent(input, signal, text => emit({ type: "status", text })); emit({ type: "result", reply }); }
-      catch { emit({ type: "error", error: signal.aborted ? "请求已取消或超时，请重试。" : "模型返回格式异常或网络不可达，请检查连接设置。" }); }
+      catch (error) { emit({ type: "error", error: signal.aborted ? "请求已取消或超时，请重试。" : safeError(error).error }); }
       finally { if (!stop.signal.aborted) controller.close(); }
     },
     cancel() { stop.abort(); },

@@ -1,4 +1,5 @@
 "use client";
+import { safeAuthUrl } from "@/lib/security/auth-url";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
@@ -11,8 +12,7 @@ export function ChannelAuth({onAuthorized,channel="dingtalk"}:{onAuthorized:()=>
   const done=useRef(onAuthorized);useEffect(()=>{done.current=onAuthorized;});
   useEffect(()=>{if(!jobId)return;const abort=new AbortController();let timer:ReturnType<typeof setTimeout>;
     async function poll(){try{const r=await fetch(`/api/setup?job=${encodeURIComponent(jobId!)}`,{signal:abort.signal,cache:"no-store"});const data=await r.json();if(!r.ok)throw new Error(data.error||"授权进度读取失败");
-      const links=(data.lines||[]).flatMap((line:string)=>line.match(/https:\/\/[^\s"'<>）)]+/g)||[]);
-      const link=links.find((value:string)=>{try{return new URL(value).hostname==="login.dingtalk.com";}catch{return false;}});if(link)setUrl(link);
+      const link=safeAuthUrl(data.authUrl);if(link)setUrl(link);
       setProgress(wechat?(data.lines?.at(-1)||data.note||"正在准备微信连接…"):link?"请用手机钉钉扫码，按官方页面确认授权。":data.note||"正在准备连接工具和材料服务…");
       if(data.status==="running")timer=setTimeout(poll,1000);else {setJobId(null);if(data.ok)done.current();else setError(data.note||data.error||"授权未完成，可重试");}
     }catch(e){if(!abort.signal.aborted){setError((e as Error).message);setJobId(null);}}}

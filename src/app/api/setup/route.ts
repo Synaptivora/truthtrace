@@ -1,3 +1,4 @@
+import { authUrlFromLines } from "@/lib/security/auth-url";
 import { secureRoute } from "@/lib/security/boundary";
 import { NextResponse } from "next/server";
 import { ensureIngestion } from "@/lib/ingestion/service";
@@ -48,6 +49,7 @@ function snapshot(job: Job) {
   return {
     id: job.id,
     action: job.action,
+    authUrl: job.action === "login-dingtalk" && job.status === "running" ? authUrlFromLines(job.lines) : undefined,
     status: job.status,
     steps: job.steps.map((step,index)=>({id:`step-${index}`,index,status:step.status,label:`配置步骤 ${index+1}`,detail:step.status==="failed"?"步骤失败，请在本机检查配置":"状态已更新"})),
     lines: job.lines.length ? ["执行进度已更新；原始日志仅限本机查看。"] : [],

@@ -51,3 +51,10 @@ it("does not expose raw setup job logs, paths or exceptions",async()=>{
  expect(response.status).toBe(200);const data=await response.json();expect(data.status).toBe('failed');expect(data.steps).toHaveLength(1);expect(JSON.stringify(data)).not.toContain('private-secret');
  }finally{state.__ttSetupJobs.delete('test-private-job');}
 });
+it('returns structured device URL for the existing QR flow, never arbitrary logs',async()=>{
+ const state=globalThis as typeof globalThis & {__ttSetupJobs:Map<string,unknown>};
+ const authUrl='https://login.dingtalk.com/oauth2/device/verify.htm?user_code=TEST';
+ state.__ttSetupJobs.set('auth-fixture',{id:'auth-fixture',action:'login-dingtalk',status:'running',steps:[],lines:['private-token',authUrl],startedAt:1});
+ try{const response=await GET(new Request('http://localhost:3000/api/setup?job=auth-fixture',{headers:{host:'localhost:3000',authorization:`Bearer ${'t'.repeat(64)}`}}));const data=await response.json();expect(data.authUrl).toBe(authUrl);expect(JSON.stringify(data.lines)).not.toContain('private-token');}
+ finally{state.__ttSetupJobs.delete('auth-fixture');}
+});
