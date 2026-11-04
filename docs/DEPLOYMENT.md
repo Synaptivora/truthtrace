@@ -4,10 +4,12 @@
 ## 安装与启动
 Node 22.13+（建议24）和Python3。首次运行npm install、npm run setup（仅明确需要渠道依赖时）、npm run build、npm run start:local；开发npm run dev:local。默认访问http://127.0.0.1:3000。dev/start也固定回环，但只有local启动器自动配置浏览器会话bootstrap和服务间认证。
 上传总限额25MiB，普通JSON2MiB；超额明确拒绝，不静默截断。Python与Next共用TRUTHTRACE_INGESTION_TOKEN；浏览器不得获得该令牌。不要关闭认证来修复401，应检查两个进程的令牌配置。
+自定义材料服务令牌至少32字符。升级后先停止旧Python解析进程再使用local启动器；`/health`只代表存活，`/health/auth`才验证服务间凭据。旧版本或令牌不匹配的占端口服务会明确报错，不自动启动第二个进程覆盖。IPv4和IPv6回环冷启动均已验证。
 
 ## 模型
 通过界面保存连接；三协议保留。管理员显式配置TRUTHTRACE_MODEL_PRIVATE_ORIGINS才能访问本机或局域模型，例如http://127.0.0.1:11434；列表以逗号分隔、精确origin。未授权私网/DNS解析地址拒绝，重定向不携带密钥。
 没有模型时明确演示/规则模式；模型异常保留材料，修复连接后重新分析。
+Python渠道模型调用同样禁止重定向、固定获准DNS地址并执行总网络截止时间；私网和HTTP模型必须显式允许完整origin。上传渠道副本默认最多25MiB/份、250MiB总量、256份，24小时过期；上传时清理自有过期副本，不删除真实渠道原件。目录及降低配额的配置见 `services/ingestion/tests/security_review_record.md`。
 
 ## 数据和恢复
 TRUTHTRACE_DATA_DIR指定隔离的数据目录，默认.truthtrace。数据库、objects、originals、连接文件和本机会话secret应受操作系统账户权限保护。不要把运行数据复制进Git或评估fixtures。
