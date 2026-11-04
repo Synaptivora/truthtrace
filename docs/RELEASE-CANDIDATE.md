@@ -1,5 +1,7 @@
 # TruthTrace 本机候选版本 · 2026-11-04
 
+后续 UI 整合修复（晚于下述冻结标签）见 [UI-REVIEW-2026-11-04.md](UI-REVIEW-2026-11-04.md)，包括搜索、承诺、会话、调查状态、历史引用、时间线与语义化报告预览；最新代码随集成 PR #24 更新。原候选标签保持不变，不能把标签中的旧 UI 当作本轮修复结果。
+
 基线 main：10202a6fc356abcee8e4d6b485bc58be45298875。集成分支：integration/tt-v2-20261104；总审查入口：[PR #24](https://github.com/Synaptivora/truthtrace/pull/24)。这是待审查本机候选，不是main已合并、真实模型质量认证或公网发布许可。
 
 ## 交付与PR依赖
