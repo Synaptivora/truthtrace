@@ -164,7 +164,7 @@ function ChatSession({ onIntent, context, mode, connection, initialTurns, onTurn
     const history = [...turns, { role: "user" as const, content: question.trim() }].slice(-23);
     try {
       if(await onIntent(question,controller.signal)){setDraft("");return;}
-      const response = await fetch("/api/agent/chat", { method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowImages, messages: history.map(({ role, content }) => ({ role, content })), mode, ...(mode === "custom" ? { connection } : {}), evidence: context?.evidence.map(e => e.kind === "image" && !allowImages ? { ...e, content: "[图片像素未发送给对话助手]" } : e) ?? [], analysis: context?.analysis }) });
+      const response = await fetch("/api/agent/chat", { method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId:context?.caseId, allowImages, messages: history.map(({ role, content }) => ({ role, content })), mode, ...(mode === "custom" ? { connection } : {}), evidence: context?.caseId ? [] : context?.evidence.map(e => e.kind === "image" && !allowImages ? { ...e, content: "[图片像素未发送给对话助手]" } : e) ?? [], analysis: context?.caseId ? undefined : context?.analysis }) });
       if (!response.ok) { const data = await response.json(); throw new Error(data.error || "请求失败"); }
       const reader = response.body?.getReader(); if (!reader) throw new Error("未收到回复流。");
       const decoder = new TextDecoder(); let buffer = ""; let result: AgentReply | undefined;
@@ -192,7 +192,12 @@ function ChatSession({ onIntent, context, mode, connection, initialTurns, onTurn
     <div className="agent-scope"><span>{context ? `本案 ${context.evidence.length} 份材料` : "通用对话 · 不读取案件"} · {mode === "demo" ? "本地演示" : mode === "custom" ? connection.model || "未填写模型" : "已保存的模型"}</span><button aria-label="清空当前对话" disabled={busy} onClick={() => { save([]); setError(""); }}><Trash2 size={14} /></button></div>
     <div className="agent-messages" role="log" aria-label="对话记录">
       {!turns.length && <div className="agent-welcome"><h3>从一个问题开始。</h3><p>{context ? "输入问题，回复会保留材料来源。" : "先告诉我想查清什么，我会帮你选择材料和下一步。"}</p>{(context ? ["这句话出自哪份材料？"] : ["我想查清退款承诺是否兑现", "我有一张截图想补充"]).map(q => <button key={q} disabled={busy} onClick={() => { setDraft(q); void send(q); }}>{q}</button>)}</div>}
-      {turns.map((turn, index) => <article key={index} className={`agent-message ${turn.role}`}><strong>{turn.role === "user" ? "你" : "咪探长"}</strong><p>{turn.content}</p>{turn.reply && <><small>{turn.reply.mode === "demo" ? "本地演示 · 非模型判断" : `模型回复 · ${turn.reply.model}`}</small>{turn.reply.citations.length > 0 && <div className="agent-citations">{turn.reply.citations.map(c => <button key={c.id} onClick={() => setSource(context?.evidence.find(e => e.id === c.evidenceId) ?? null)} title={c.excerpt}>[{c.id}] {c.name} ↗</button>)}</div>}<details><summary>来源与处理方式</summary><ul>{turn.reply.steps.map((s, i) => <li key={i}>{s}</li>)}</ul><p>引用表示读取过的来源，不代表事实已经核实。</p></details></>}</article>)}
+      {turns.map((turn, index) => <article key={index} className={`agent-message ${turn.role}`}><strong>{turn.role === "user" ? "你" : "咪探长"}</strong><p>{turn.content}</p>{turn.reply && <><small>{turn.reply.mode === "demo" ? "本地演示 · 非模型判断" : `模型回复 · ${turn.reply.model}`}</small>{turn.reply.citations.length > 0 && <div className="agent-citations">{turn.reply.citations.map(c => <button key={c.id} onClick={() => {
+        const current=context?.evidence.find(e=>e.id===c.evidenceId);
+        const refs=c.refs??[];
+        const exact=!!current&&refs.length>0&&refs.every(ref=>!!ref.provenance&&ref.provenance.caseId===context?.caseId&&ref.provenance.version===current.version);
+        setSource(exact?current!:{id:c.evidenceId,name:`${c.name} · 引用摘录（非当前原文）`,kind:"text",mimeType:"text/plain",content:`无法确认当前原文与引用版本一致；以下仅为当时保留的摘录。\n引用版本：${refs.map(ref=>ref.provenance?.version??"未知").join("、")||"未知"}\n\n${refs.length?refs.map(ref=>ref.quote).join("\n\n"):c.excerpt}`});
+      }} title={c.excerpt}>[{c.id}] {c.name} ↗</button>)}</div>}<details><summary>来源与处理方式</summary><ul>{turn.reply.steps.map((s, i) => <li key={i}>{s}</li>)}</ul><p>引用表示读取过的来源，不代表事实已经核实。</p></details></>}</article>)}
       {busy && <div className="agent-progress" role="status">{status}</div>}<div ref={end} />
     </div>
     {error && <p className="agent-error" role="alert">{error}</p>}

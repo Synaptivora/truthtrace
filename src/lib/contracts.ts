@@ -9,13 +9,31 @@ export const EvidenceSchema = z.object({
   source: z.string().optional(),
   originalHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   parserVersion: z.string().optional(),
+  version: z.number().int().positive().optional(),
 });
 
+export const LocatorV2Schema = z.discriminatedUnion("type", [
+  z.object({type:z.literal("whole_file")}).strict(),
+  z.object({type:z.literal("text_range"),start:z.number().int().min(0),end:z.number().int().positive()}).strict().refine(v=>v.end>v.start),
+]);
+export const ProvenanceSchema = z.object({
+  schemaVersion:z.literal(2),caseId:z.string().min(1),evidenceId:z.string().min(1),version:z.number().int().positive(),
+  segmentId:z.string().nullable(),originalHash:z.string().regex(/^[a-f0-9]{64}$/).nullable(),parserVersion:z.string().nullable(),
+  locator:LocatorV2Schema,verificationMethod:z.enum(["exact_text","visual_unverified"]),
+}).strict();
 export const EvidenceRefSchema = z.object({
-  evidenceId: z.string().min(1),
-  quote: z.string().min(1),
-  locator: z.string().optional(),
-});
+  evidenceId: z.string().min(1), quote: z.string().min(1), locator: z.string().optional(),
+  provenance:ProvenanceSchema.optional(),
+  citationValidation:z.enum(["validated","legacy_unresolved","visual_unverified"]).optional(),
+}).strict();
+export const SupportStateSchema=z.object({
+  sourceSupport:z.enum(["unchecked","supported","unsupported","ambiguous"]),
+  factualVerification:z.enum(["not_checked","corroborated","contradicted","unresolved"]),
+}).strict();
+export const CoverageSchema=z.object({
+  totalEvidence:z.number().int().min(0),readEvidence:z.number().int().min(0),
+  unreadEvidenceIds:z.array(z.string()),truncated:z.boolean(),dropped:z.number().int().min(0),
+}).strict();
 
 export const PersonSchema = z.object({
   id: z.string().min(1),
@@ -85,6 +103,9 @@ export const AnalysisPayloadSchema = z.object({
 
 export const AnalysisResultSchema = AnalysisPayloadSchema.extend({
   generatedAt: z.string(),
+  sourceSupport:z.literal("unchecked").optional(),
+  factualVerification:z.literal("not_checked").optional(),
+  coverage:CoverageSchema.optional(),
   analysisMode: z.enum(["mock", "model", "rule"]),
 });
 

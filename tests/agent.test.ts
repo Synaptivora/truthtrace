@@ -145,3 +145,7 @@ describe("transport metadata",()=>{
  it("maps malformed responses to a safe error",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response("secret")));await expect(modelStep(connection,[],[],new AbortController().signal)).rejects.toMatchObject({code:"MODEL_RESPONSE",retryable:false});});
  it("freezes resolved credential destination",()=>{const resolved=resolveConnection(connection)!;expect(Object.isFrozen(resolved)).toBe(true);expect(()=>{resolved.baseUrl="https://attacker.example";}).toThrow();});
 });
+describe("case answer provenance policy",()=>{
+ it("rejects case answers without references",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(reply(textReply("已全部到账"))));await expect(runAgent(input,new AbortController().signal,()=>{})).rejects.toThrow("缺少已读取");});
+ it("permits greeting and explicit insufficiency without invented citations",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(reply(textReply("你好！"))));expect((await runAgent({...input,messages:[{role:"user",content:"你好"}]},new AbortController().signal,()=>{})).citationStatus).toBe("unverified_answer");vi.stubGlobal("fetch",vi.fn().mockResolvedValue(reply(textReply("现有材料不足，无法核实。"))));expect((await runAgent(input,new AbortController().signal,()=>{})).citations).toEqual([]);});
+});

@@ -11,7 +11,7 @@ async function rawPOST(request:Request,{params}:{params:Promise<{id:string}>}) {
     await readJson(request,1000);
     if(!effectiveConnection(undefined,"analysis"))return Response.json({error:"还未连接分析模型，请先在助手设置中保存模型连接。"},{status:409});
     const {id}=await params,c=store.case(id),snapshot=JSON.stringify(c.evidence);
-    const outcome=await analyzeEvidence(c.evidence);
+    const outcome=await analyzeEvidence(c.evidence,{caseId:id,evidence:c.evidence,segments:store.snapshot(id)});
     const saved=store.transaction(()=>{
       const current=store.case(id);
       if(JSON.stringify(current.evidence)!==snapshot)throw new Error("分析期间材料已更新，请重新分析最新材料。");
