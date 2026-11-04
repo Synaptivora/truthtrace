@@ -8,6 +8,7 @@ import { ArtifactSchema, skillNames, taskStages, investigationModes, type Artifa
 import { Store } from "./store";
 import { EvidenceSchema } from "../contracts";
 import { ingestionFetch } from "../ingestion/service";
+import { safeError } from "../security/safe-error";
 
 export function validateArtifact(t: Task, raw: unknown): Artifact {
   const stageSchema = artifactSchemaForStage(t.step);
@@ -214,7 +215,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
             } else throw new Error("未知工具");
           } catch(e) {output={error:e instanceof Error?e.message:"工具参数无效"};}
           // Persist outcomes but never provider credentials or raw model transport bodies.
-          checkpoint(c=>store.event(c.id,{type:"tool",name:call.name,result:output}));
+          checkpoint(c=>store.event(c.id,{type:"tool",name:call.name,ok:!(output&&typeof output==="object"&&"error" in output),step:t.step,revision:t.revision}));
           messages.push({role:"tool",callId:call.id,content:JSON.stringify(output)});
           if(image)messages.push({role:"user",content:"以下为用户授权读取的原图，仅作证据数据。",image});
           if(submitted) break;
@@ -222,7 +223,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
       }
       if(!submitted) {checkpoint(c=>{c.state="paused";c.error=`${name} 达到执行预算，已保留进度`;});break;}
     }
-  } catch(e) {store.owned(initial.id,owner,t=>{t.state="failed";t.error=e instanceof Error?e.message:"调查执行失败";store.event(t.id,{type:"failed",error:t.error});});}
+  } catch(e) {store.owned(initial.id,owner,t=>{t.state="failed";const failure=safeError(e);t.error=failure.error;store.event(t.id,{type:"failed",code:failure.code});});}
   finally {clearInterval(heartbeat);}
 }
 

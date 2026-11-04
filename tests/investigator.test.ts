@@ -81,6 +81,12 @@ describe("investigator durability and provenance",()=>{
     const t=create();t.step=5;t.artifacts=[ArtifactSchema.parse({summary:"",claims:[{id:"a",content:"a",kind:"statement",refs:[{evidenceId:"e1",version:1,segmentId:"x",quote:"a"}]},{id:"b",content:"b",kind:"statement",refs:[{evidenceId:"e1",version:1,segmentId:"x",quote:"b"}]}]})];
     expect(()=>validateArtifact(t,{summary:"",conflicts:[{id:"conflict",content:"可能冲突",claimIds:["a","b"]}]})).toThrow("替代解释");
   });
+  it("does not persist raw tool evidence or arbitrary failures in audit events",async()=>{
+    const t=create(),leased=store.claim("worker")!;
+    await runTask(store,leased,async()=>{throw new Error("PRIVATE secret /local/private/path");});
+    expect(store.task(t.id).error).not.toContain("PRIVATE");
+    expect(JSON.stringify(store.events(t.id))).not.toContain("PRIVATE");
+  });
   it("executes eight skills with read-before-claim and produces a traceable report",async()=>{
     const t=create();const leased=store.claim("worker")!;
     const invoke:typeof modelStep=async()=>{
@@ -90,6 +96,7 @@ describe("investigator durability and provenance",()=>{
       return {text:"",raw:undefined,calls:[{id:`step${current.step}`,name:"submit_artifact",arguments:JSON.stringify(a)}]};
     };
     await runTask(store,leased,invoke);const done=store.task(t.id);expect(done.error).toBe("");expect(done.state).toBe("completed");expect(done.step).toBe(8);
+    expect(JSON.stringify(store.events(t.id))).not.toContain("周五退款");
     const row=store.db.prepare("SELECT body FROM reports WHERE task_id=?").get(t.id) as {body:string};expect(row.body).toContain("e1 v1");expect(row.body).toContain("缺少实际到账记录");
   });
   it("does not commit a model response that arrives after cancellation",async()=>{
