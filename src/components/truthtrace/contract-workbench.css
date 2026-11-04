@@ -130,3 +130,37 @@
 .contract-source-dialog>img { min-height:0; flex-shrink:1; }
 .evidence-media-chip.has-thumbnail { width:min(256px,100%); }
 .evidence-media-chip.has-thumbnail img { width:100%; }
+
+/* Workbench tools and evidence states share the existing warm archive palette. */
+.contract-topbar { flex-wrap:wrap; gap:12px; padding-block:14px; }
+.contract-topbar .contract-report-tools { flex:0 1 auto; min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-left:auto; }
+.contract-report-tools label { display:flex; align-items:center; gap:8px; color:#cdb997; font:12px var(--sans); }
+.contract-report-tools select { min-height:38px; max-width:100%; border:1px solid #937047; border-radius:6px; padding:7px 9px; background:#30291f; color:#f0dfbf; font:inherit; color-scheme:dark; }
+.contract-shell .contract-outline { min-height:38px; cursor:pointer; justify-content:center; }
+.contract-shell button:disabled { opacity:.55; cursor:not-allowed; }
+.contract-shell :is(button,select,textarea,summary):focus-visible { outline:2px solid #efc684; outline-offset:3px; }
+.contract-investigation nav { min-width:0; overflow-x:auto; scrollbar-width:thin; }
+.contract-investigation nav button { flex-shrink:0; min-height:36px; white-space:nowrap; }
+.contract-investigation>header .contract-expand { flex-shrink:0; }
+.contract-source-state { padding:28px; overflow:auto; font:14px/1.8 var(--sans); color:#634a2e; }
+.contract-source-state blockquote { margin:16px 0; padding:14px 18px; border-left:3px solid #aa7f47; background:#f7ecd6; white-space:pre-wrap; overflow-wrap:anywhere; }
+.contract-source-state .contract-outline { color:#634a2e; }
+.contract-citation-status { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0; padding:12px 24px; border-top:1px solid #b69a6e; background:#ddccaa; font:12px/1.8 var(--sans); }
+.contract-citation-status button { margin-left:auto; padding:7px 12px; border:1px solid #a4804b; border-radius:5px; background:#f4e7ce; color:#634627; cursor:pointer; }
+.contract-source-dialog .source-note { padding:12px 24px 18px; border-top:1px solid #b69a6e; }
+.contract-source-dialog .source-note summary { cursor:pointer; font-size:13px; padding:6px 0; }
+.contract-source-dialog .source-note textarea { width:100%; box-sizing:border-box; min-height:88px; margin:10px 0 4px; padding:10px; background:#fff8e9; color:#4d3824; border:1px solid #aa8d61; border-radius:6px; font:13px/1.7 var(--sans); resize:vertical; }
+.contract-source-dialog .source-note small { display:block; color:#745a38; }
+.evidence-content details { margin:8px 0; padding:10px; border:1px solid #b79c70; border-radius:6px; background:#f1e5cc; }
+.evidence-content details summary { cursor:pointer; color:#624829; }
+.evidence-content details button { display:block; width:100%; padding:9px 12px; margin-top:8px; border:1px solid #c5b08b; border-radius:5px; background:#fff8e9; text-align:left; color:#5d4327; overflow-wrap:anywhere; cursor:pointer; }
+@media(max-width:850px) { .contract-topbar .contract-report-tools { flex-basis:100%; justify-content:flex-end; } }
+@media(max-width:550px) {
+ .contract-topbar .contract-report-tools { display:grid; grid-template-columns:1fr 1fr; }
+ .contract-report-tools label { grid-column:1/-1; justify-content:space-between; }
+ .contract-report-tools select { flex:1; }
+ .contract-topbar>.contract-case-heading { flex:1; min-width:0; }
+ .contract-source-state { padding:20px; }
+ .contract-citation-status,.contract-source-dialog .source-note { padding-inline:16px; }
+ .contract-investigation>header { padding:8px; }
+}
