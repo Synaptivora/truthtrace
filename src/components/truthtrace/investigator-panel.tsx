@@ -1,4 +1,5 @@
 "use client";
+import {currentClaimCheck} from "@/lib/investigator/plan";
 import Image from "next/image";
 import { Settings } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
@@ -23,7 +24,6 @@ export function InvestigatorPanel({context,initialGoal,routedMode,onGoalChange,o
   const stages=taskStages(task?.mode),completed=task?stages.filter(stage=>stage<task.step).length:0;
   const gaps=task?[...new Set([...(task.collectionNotes||[]),...task.artifacts.flatMap(a=>a.gaps)])]:[];
   const claims=task?.artifacts.flatMap(a=>a.claims)||[];
-  const checks=task?.artifacts.flatMap(a=>a.checks)||[];
   const answer=task?.artifacts.findLast(a=>a.answer)?.answer;
   const hasNewEvidence=task&&context.evidence.some(e=>task.snapshot.filter(s=>s.evidenceId===e.id).map(s=>s.content).join("")!==e.content);
   async function prepare(){const h=await call("/api/assistant/service");setHealth(h);if(!h.model){onConfigure(goal);throw new Error("目标已保留。连接支持材料检索的模型后，即可继续。");}if(!h.worker)setHealth(await call("/api/assistant/service",{}));}
@@ -49,7 +49,7 @@ export function InvestigatorPanel({context,initialGoal,routedMode,onGoalChange,o
       {finished&&<div className="investigator-result"><h3>对这个问题的回答</h3>{answer?<><p>{answer.text}</p><small>依据：{answer.claimIds.join("、")}，原文见下方。</small></>:<p>{claims.length?"已核对以下说法；这些依据尚不足以自动给出完整结论，请结合支持状态与原文判断。":"现有材料不足以支持结论。请补充相关记录后继续核查。"}</p>}<h3>还不能确定</h3>{gaps.length?<ul>{gaps.map(g=><li key={g}>{g}</li>)}</ul>:<p>未列出额外缺口；仍需注意未读取材料和图像识别的限制。</p>}<button onClick={()=>onSupplement(undefined,goal)}>补充材料，继续这个问题</button></div>}
       {!finished&&<progress aria-label="调查进度" value={completed} max={stages.length}/>}
       {task.artifacts.flatMap(a=>a.decisions).filter(d=>!task.decisions.some(v=>v.id===d.id)).map(d=><article key={d.id}><h3>{d.question}</h3><p>请说明你知道的情况；你的回答会作为补充说明，不会替代原始证据。</p><label>你的回答<textarea value={reasons[d.id]||""} onChange={e=>setReasons({...reasons,[d.id]:e.target.value})} placeholder="例如：是同一个人，两个昵称都属于这位同学。"/></label><button disabled={busy||task.state==="running"||!reasons[d.id]?.trim()} onClick={()=>void decide(d.id)}>提交回答并继续</button><button disabled={busy||task.state==="running"} onClick={()=>void decide(d.id,true)}>暂时无法确认</button></article>)}
-      {claims.length>0&&<h3>依据与原文</h3>}{claims.map(c=><article key={c.id}><strong>{c.content}</strong><p>{terms[c.kind]} · {terms[checks.find(v=>v.claimId===c.id)?.status||""]||"尚未独立核查"}</p><p>{checks.find(v=>v.claimId===c.id)?.reason}</p>{c.refs.map((ref,i)=><button key={i} onClick={()=>setSource(ref.segmentId)}>查看原文：{ref.quote.slice(0,60)}</button>)}</article>)}
+      {claims.length>0&&<h3>依据与原文</h3>}{claims.map(c=><article key={c.id}><strong>{c.content}</strong><p>{terms[c.kind]} · {terms[currentClaimCheck(task,c.id)?.status||""]||"尚未独立核查"}</p><p>{task.executionPlan?.staleResultIds.includes(c.id)?"发现新反证，原核查状态已失效，等待重新核查。":currentClaimCheck(task,c.id)?.reason}</p>{c.refs.map((ref,i)=><button key={i} onClick={()=>setSource(ref.segmentId)}>查看原文：{ref.quote.slice(0,60)}</button>)}</article>)}
       {([["people","人物候选"],["relationships","关系"],["events","时间线"],["commitments","承诺"],["conflicts","需要对照的说法"]] as const).filter(([key])=>task.artifacts.some(a=>a[key].length)).map(([key,title])=><details key={key}><summary>{title}</summary>{task.artifacts.flatMap(a=>a[key]).map(f=><article key={f.id}><strong>{f.content}</strong><p>{f.time}</p>{f.alternatives.map((v,i)=><p key={i}>其他解释：{v}</p>)}</article>)}</details>)}
       <details><summary>查看处理过程与覆盖范围</summary><p>{completed}/{stages.length} · {task.model?.name}</p><ol className="investigator-steps">{stages.map(i=><li key={skillNames[i]}>{i<task.step?"✓ ":i===task.step?"→ ":""}{skillLabels[i]}</li>)}</ol><p>共 {task.snapshot.length} 个片段，读取 {task.reads.length} 个。未检出不等于不存在。</p></details>
       {task?.stale&&<p role="status">材料已更新，本报告基于旧版本。请重新核查后使用结论。</p>}<div className="investigator-actions">{["queued","running","waiting_user"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("pause")}>先停一下</button>}{["paused","failed","waiting_user"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("resume")}>继续核查</button>}{task.state!=="running"&&<button disabled={busy} onClick={()=>void act("revise")}>按调整后的目标重新核查</button>}{!["completed","cancelled"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("cancel")}>结束本次调查</button>}{finished&&<a href={`/api/investigations/${task.id}/report`}>保存报告</a>}</div>

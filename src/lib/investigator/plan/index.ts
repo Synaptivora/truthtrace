@@ -12,12 +12,15 @@ export function requestReplan(t:Task,input:unknown){
  if(request.affectedClaimIds.some(id=>!claims.some(c=>c.id===id)))throw Error('重规划引用未知主张');
  if(request.segmentIds.some(id=>!t.reads.includes(id)||!t.snapshot.some(s=>s.id===id&&s.kind!=='image')))throw Error('反证必须来自已读取的当前快照文本');
  const plan=ensurePlan(t);
- if(plan.replans>=plan.maxReplans){t.executionOutcome='insufficient';t.error='达到反证重规划上限，已保留依据，需人工调整目标。';t.step=8;return;}
- plan.replans++;plan.requests.push({...request,round:plan.replans});
+ plan.requests.push({...request,round:plan.replans+1});
  const affected=new Set(request.affectedClaimIds);
  plan.staleResultIds=[...new Set([...plan.staleResultIds,...affected,...t.artifacts.flatMap(a=>[...a.people,...a.relationships,...a.events,...a.conflicts,...a.commitments]).filter(f=>f.claimIds.some(id=>affected.has(id))).map(f=>f.id)])];
  for(const node of plan.nodes)if(node.stage>=6)node.status='stale';
+ if(plan.replans>=plan.maxReplans){t.executionOutcome='insufficient';t.error='达到反证重规划上限，已保留依据，需人工调整目标。';t.step=8;return;}
+ plan.replans++;
  for(const stage of [2,6,7])plan.nodes.push({id:`${t.id}:${t.revision}:${plan.replans}:${stage}`,goal:request.reason,stage,dependencies:stage===2?[]:[`${t.id}:${t.revision}:${plan.replans}:${stage===6?2:6}`],budget:{maxCalls:5},coverageTarget:request.segmentIds,status:'pending',resultRefs:[],revision:t.revision,round:plan.replans});
  t.step=2;
 }
 export function finishPlanStage(t:Task,stage:number,resultRefs:string[]){const plan=ensurePlan(t);const node=plan.nodes.findLast(n=>n.stage===stage&&n.status==='pending');if(node){node.status='completed';node.resultRefs=resultRefs;}if(stage===6)plan.staleResultIds=[];return plan.replans>0&&stage===2?6:taskStages(t.mode).find(s=>s>stage)??8;}
+
+export function currentClaimCheck(t:Task,claimId:string){return t.executionPlan?.staleResultIds.includes(claimId)?undefined:t.artifacts.flatMap(a=>a.checks).findLast(c=>c.claimId===claimId);}

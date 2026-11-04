@@ -89,9 +89,14 @@ export class Store {
     this.index.replaceVersion({caseId,evidenceId:e.id,version},segmentEvidence({caseId,evidenceId:e.id,version,kind:e.kind,content:e.content,source:e.source}));
     return saved;
   }
+  private boundVersion(caseId:string,e:Evidence):number {
+    const hash=createHash("sha256").update(e.kind+"\0"+e.content).digest("hex");
+    const row=(e.version!==undefined?this.db.prepare("SELECT version FROM evidence WHERE case_id=? AND id=? AND version=? AND hash=?").get(caseId,e.id,e.version,hash):this.db.prepare("SELECT version FROM evidence WHERE case_id=? AND id=? AND hash=? ORDER BY version DESC LIMIT 1").get(caseId,e.id,hash)) as {version:number}|undefined;
+    if(!row)throw new Error("案件材料无法绑定确切历史版本");return row.version;
+  }
   snapshot(caseId: string): Segment[] {
     return this.case(caseId).evidence.flatMap(e => {
-      const last = {version:(e as Evidence & {version?:number}).version||(this.db.prepare("SELECT MAX(version) AS version FROM evidence WHERE case_id=? AND id=?").get(caseId,e.id) as {version:number}).version};
+      const last = {version:this.boundVersion(caseId,e)};
       const segments: Segment[] = [];
       // Exact character ranges remain valid even when a parser supplies no page/message coordinates.
       const size = e.kind === "image" ? e.content.length : 4000;
@@ -111,7 +116,7 @@ export class Store {
     const exists=this.db.prepare("SELECT 1 FROM tt_search_segments WHERE case_id=? AND evidence_id=? AND version=? LIMIT 1").get(caseId,evidenceId,version);if(exists)return;
     const {evidence}=this.evidenceVersion(caseId,evidenceId,version);this.index.replaceVersion({caseId,evidenceId,version},segmentEvidence({caseId,evidenceId,version,kind:evidence.kind,content:evidence.content,source:evidence.source}));
   }
-  searchCase(caseId:string,query:string,offset=0){const c=this.case(caseId);const grants=c.evidence.map(e=>({caseId,evidenceId:e.id,version:(e as Evidence&{version?:number}).version||Number((this.db.prepare("SELECT MAX(version) version FROM evidence WHERE case_id=? AND id=?").get(caseId,e.id) as {version:number}).version)}));for(const g of grants)this.indexVersion(g.caseId,g.evidenceId,g.version);return this.index.search(query,{authorizedVersions:grants,topK:20,offset,expand:true});}
+  searchCase(caseId:string,query:string,offset=0){const c=this.case(caseId);const grants=c.evidence.map(e=>({caseId,evidenceId:e.id,version:this.boundVersion(caseId,e)}));for(const g of grants)this.indexVersion(g.caseId,g.evidenceId,g.version);return this.index.search(query,{authorizedVersions:grants,topK:20,offset,expand:true});}
   searchSnapshot(t:Task,query:string){const grants=[...new Map(t.snapshot.map(s=>[s.evidenceId+"@"+s.version,{caseId:t.caseId,evidenceId:s.evidenceId,version:s.version}])).values()];for(const g of grants)this.indexVersion(g.caseId,g.evidenceId,g.version);const result=this.index.search(query,{authorizedVersions:grants,topK:100,expand:true});const matches=[...new Map(result.hits.flatMap(h=>t.snapshot.filter(s=>h.evidenceId===s.evidenceId&&h.version===s.version&&h.start<s.end&&h.end>s.start)).map(s=>[s.id,s])).values()];return {...result,matches};}
   evidenceVersion(caseId:string,id:string,version:number){this.case(caseId);if(!Number.isSafeInteger(version)||version<1)throw new Error("无效版本");const r=this.db.prepare("SELECT version,hash,body FROM evidence WHERE case_id=? AND id=? AND version=?").get(caseId,id,version) as {version:number;hash:string;body:string}|undefined;if(!r)throw new Error("版本不存在");return {evidence:{...JSON.parse(r.body),version:r.version},version:r.version,hash:r.hash};}
   evidenceVersions(caseId:string,id:string){this.case(caseId);return this.db.prepare("SELECT version,hash FROM evidence WHERE case_id=? AND id=? ORDER BY version").all(caseId,id);}

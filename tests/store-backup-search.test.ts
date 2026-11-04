@@ -18,3 +18,12 @@ it('searches a pinned task version and never substitutes newer evidence',()=>{
  expect(s.searchSnapshot(t,'refund').matches[0].version).toBe(1);expect(s.searchSnapshot(t,'completed').matches).toHaveLength(0);expect(s.searchCase('a','completed').hits[0].version).toBe(2);expect(s.searchCase('a','refund').hits).toHaveLength(0);
  }finally{s.close();rmSync(root,{recursive:true,force:true});}
 });
+
+it('binds legacy content to its matching historical version instead of MAX',()=>{
+ const root=mkdtempSync(join(tmpdir(),'tt-legacy-version-'));const s=new Store(root);try{
+ const input=(content:string)=>({caseId:'a',analysis,evidence:[{id:'e',name:'e',kind:'text',mimeType:'text/plain',content}]});s.saveCase(input('version one'));s.saveCase(input('version two'));
+ s.db.prepare('UPDATE cases SET body=? WHERE id=?').run(JSON.stringify(input('version one')),'a');expect(s.snapshot('a')[0].version).toBe(1);expect(s.searchCase('a','one').hits[0].version).toBe(1);
+ expect(s.saveCase(input('version one')).evidence[0].version).toBe(3);expect(s.snapshot('a')[0].version).toBe(3);
+ s.db.prepare('UPDATE cases SET body=? WHERE id=?').run(JSON.stringify(input('unknown version')),'a');expect(()=>s.snapshot('a')).toThrow('确切历史版本');
+ }finally{s.close();rmSync(root,{recursive:true,force:true});}
+});
