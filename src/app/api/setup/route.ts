@@ -49,13 +49,13 @@ function snapshot(job: Job) {
     id: job.id,
     action: job.action,
     status: job.status,
-    steps: job.steps,
-    lines: job.lines.slice(-120),
+    steps: job.steps.map((step,index)=>({id:`step-${index}`,index,status:step.status,label:`配置步骤 ${index+1}`,detail:step.status==="failed"?"步骤失败，请在本机检查配置":"状态已更新"})),
+    lines: job.lines.length ? ["执行进度已更新；原始日志仅限本机查看。"] : [],
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
-    note: job.note,
+    note: job.status==="ok"?"配置完成":job.status==="failed"?"配置未完成，请在本机检查并重试":"配置进行中",
     ok: job.ok,
-    error: job.error,
+    error: job.error ? "配置执行失败，请在本机检查并重试" : undefined,
   };
 }
 
@@ -71,7 +71,9 @@ async function rawGET(request: Request) {
     return NextResponse.json(snapshot(job));
   }
   const result = await detect();
-  return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+  // Detection contains command output and user-specific paths: preserve shape, not raw strings.
+  const safe = JSON.parse(JSON.stringify(result, (key,value) => typeof value === "string" ? (key === "id" && ["login-dingtalk","capture-wechat-key"].includes(value) ? value : key === "platform" && ["win32","linux","darwin"].includes(value) ? value : "本机检查项") : value));
+  return NextResponse.json(safe, { headers: { "Cache-Control": "no-store" } });
 }
 
 /** POST /api/setup {"action":"install"|"login-dingtalk"|"capture-wechat-key"} */

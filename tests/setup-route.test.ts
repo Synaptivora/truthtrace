@@ -44,3 +44,10 @@ it("rejects cross-site writes", async () => {
   expect((await POST(request("localhost:3000", { "sec-fetch-site": "cross-site" }, '{"action":"install"}'))).status).toBe(403);
   expect(runSetup).not.toHaveBeenCalled();
 });
+it("does not expose raw setup job logs, paths or exceptions",async()=>{
+ const state=globalThis as typeof globalThis & {__ttSetupJobs:Map<string,unknown>};
+ state.__ttSetupJobs.set('test-private-job',{id:'test-private-job',action:'install',status:'failed',steps:[{id:'private-secret',label:'private-secret',detail:'C:/private-secret',status:'failed'}],lines:['private-secret'],startedAt:1,note:'private-secret',error:'private-secret'});
+ try{const response=await GET(new Request('http://localhost:3000/api/setup?job=test-private-job',{headers:{host:'localhost:3000',authorization:`Bearer ${'t'.repeat(64)}`}}));
+ expect(response.status).toBe(200);const data=await response.json();expect(data.status).toBe('failed');expect(data.steps).toHaveLength(1);expect(JSON.stringify(data)).not.toContain('private-secret');
+ }finally{state.__ttSetupJobs.delete('test-private-job');}
+});
