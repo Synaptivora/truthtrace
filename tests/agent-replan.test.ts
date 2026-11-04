@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {Store} from '@/lib/investigator/store';
 import {runTask,validateStageCall} from '@/lib/investigator/runtime';
 const analysis={caseTitle:'fixture',summary:'fixture',people:[],relationships:[],events:[],contradictions:[],commitments:[],evidenceGaps:[],generatedAt:'2026-11-04',analysisMode:'rule'};
+// Real SQLite checkpoints across eight stages plus bounded replan/resume; allow CI disk contention.
 it.each([false,true])('runs bounded counterevidence loop, cap=%s',async capped=>{
  const dir=mkdtempSync(join(tmpdir(),'tt-plan-'));const store=new Store(dir);const previous={provider:process.env.AGENT_PROVIDER,model:process.env.AGENT_MODEL};process.env.AGENT_PROVIDER='ollama';process.env.AGENT_MODEL='fixture';
  try{
@@ -25,5 +26,5 @@ it.each([false,true])('runs bounded counterevidence loop, cap=%s',async capped=>
  result.step=6;requestReplan(result,{reason:'third new counterevidence',segmentIds:[result.snapshot[0].id],affectedClaimIds:['c2']});expect(currentClaimCheck(result,'c2')).toBeUndefined();expect(result.executionPlan!.staleResultIds).toContain('event');expect(result.executionPlan!.requests.at(-1)?.affectedClaimIds).toEqual(['c2']);
  store.action(result.id,"resume");await runTask(store,store.claim("resume")!,async()=>{throw Error("capped plan must not invoke model");});expect(store.task(result.id).executionOutcome).toBe("insufficient");expect(store.task(result.id).state).toBe("paused");}
  }finally{store.close();if(previous.provider===undefined)delete process.env.AGENT_PROVIDER;else process.env.AGENT_PROVIDER=previous.provider;if(previous.model===undefined)delete process.env.AGENT_MODEL;else process.env.AGENT_MODEL=previous.model;rmSync(dir,{recursive:true,force:true});}
-});
+},20_000);
 it('enforces replan stage and strict contract',()=>{expect(()=>validateStageCall(2,'request_replan',{reason:'x',segmentIds:['e'],affectedClaimIds:['c']})).toThrow();expect(()=>validateStageCall(6,'request_replan',{reason:'x',segmentIds:['e'],affectedClaimIds:['c'],claims:[]})).toThrow();});
