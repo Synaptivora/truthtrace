@@ -1,23 +1,23 @@
 # 文件所有权与任务看板
 
-远端基线 10202a6fc356abcee8e4d6b485bc58be45298875。网络 fetch 失败；所有工作树暂从本地 6de389a 建立，禁止业务代码开发，取到基线后逐一更新。原工作区保持不变。
+远端基线 10202a6fc356abcee8e4d6b485bc58be45298875。Git fetch已成功，所有工作树已同步目标基线。原工作区保持不变。
 
-当前仅分派只读审查，专业实现角色按任务卡排队，最多三名子Agent活跃；不是17名同时施工。
+只读审查完成，01/03/07已分派实现，其他角色按依赖排队，最多三名子Agent活跃；不是17名同时施工。
 
 |任务|负责人角色|独占路径|依赖|状态|
 |---|---|---|---|---|
 |TT-00|总控架构 Agent|docs/architecture-contract-v2.md; docs/agent-file-ownership.md; 三套contracts|无|待审查|
-|TT-01|Python安全 Agent|services/ingestion/server.py; services/ingestion/tests/security_*|00|阻塞：基线同步/契约门槛|
-|TT-02|API安全 Agent|src/app/api/**; src/lib/agent/http.ts|00;01契约|阻塞：基线同步/契约门槛|
-|TT-03|连接安全 Agent|src/lib/agent/providers.ts; transport.ts; src/lib/investigator/connections.ts|00|阻塞：基线同步/契约门槛|
-|TT-04|阶段授权 Agent|src/lib/investigator/runtime.ts; tests/agent-stage-*|00;03契约|阻塞：基线同步/契约门槛|
+|TT-01|Python安全 Agent|services/ingestion/server.py; services/ingestion/tests/security_*|00|进行中|
+|TT-02|API安全 Agent|src/app/api/**; src/lib/agent/http.ts|00;01契约|待开始|
+|TT-03|连接安全 Agent|src/lib/agent/providers.ts; transport.ts; src/lib/investigator/connections.ts|00|进行中|
+|TT-04|阶段授权 Agent|src/lib/investigator/runtime.ts; tests/agent-stage-*|00;03契约|待开始|
 |TT-05|引用验证 Agent|src/lib/agent/runner.ts; src/lib/ai/validate.ts; shared-model.ts|04|待开始|
 |TT-06|存储恢复 Agent|src/lib/investigator/store.ts; scripts/investigator-worker.ts; migrations|04|待开始|
-|TT-07|评估 Agent|evals/**; scripts/eval-*; .github/workflows/agent-evals.yml|00|阻塞：基线同步/契约门槛|
+|TT-07|评估 Agent|evals/**; scripts/eval-*; .github/workflows/agent-evals.yml|00|进行中|
 |TT-08|检索 Agent|src/lib/evidence-index/**; src/lib/search/**|05;06|待开始|
 |TT-09|会话 Agent|src/lib/conversation/**; src/components/truthtrace/agent-panel.tsx|05;06|待开始|
 |TT-10|动态规划 Agent|src/lib/investigator/runtime.ts; plan/**|04;05;06;07;08|待开始|
-|TT-11|媒体引用UI Agent|src/components/truthtrace/evidence-content.tsx; contract-workbench.tsx|00 locator;历史定位等05/06|阻塞：基线同步/契约门槛|
+|TT-11|媒体引用UI Agent|src/components/truthtrace/evidence-content.tsx; contract-workbench.tsx|00 locator;历史定位等05/06|待开始|
 |TT-12|案件搜索 Agent|src/components/truthtrace/case-search/**; API释放后新搜索路由|02;06;08|待开始|
 |TT-13|承诺 Agent|src/lib/commitments/**; src/components/truthtrace/commitments/**|05;06|待开始|
 |TT-14|导出 Agent|src/lib/report-render/**; report-preview/**; src/components/truthtrace/case-view.ts; src/components/truthtrace/case-view.test.ts|05;06;11释放导出接线|待开始|
