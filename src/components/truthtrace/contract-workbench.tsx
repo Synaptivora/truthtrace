@@ -7,15 +7,18 @@ import { RelationshipGraph } from "../relationship-graph";
 import { Timeline } from "../timeline";
 import type { EvidenceRef } from "@/lib/contracts";
 import { analyzeFiles } from "./api-client";
-import { analysisReport, materialKinds, uniqueRefs } from "./case-view";
+import { materialKinds, uniqueRefs } from "./case-view";
 import type { CaseAnalysis } from "./api-client";
 import { EvidenceContent } from "./evidence-content";
 import { EvidenceThumbnail } from "./evidence-thumbnail";
+import { reportDocument, renderReport } from "@/lib/report-render";
 
 import avatar from "./assets/inspector-avatar.png";
 
 export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAnalysis; onHome: () => void; onUpdate: (value: CaseAnalysis) => void | Promise<void> }) {
   const { analysis, evidence } = result;
+  const [reportFormat,setReportFormat]=useState<"markdown"|"html">("markdown");
+  const [reportPreview,setReportPreview]=useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [analyzing,setAnalyzing]=useState(false);
@@ -70,8 +73,8 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
   function exportReport() {
-    const url = URL.createObjectURL(new Blob([analysisReport(result, notes)], { type: "text/markdown;charset=utf-8" }));
-    const link = document.createElement("a"); link.href = url; link.download = "TruthTrace-调查报告.md"; downloadUrls.current.add(url); document.body.appendChild(link); link.click(); link.remove();
+    const url = URL.createObjectURL(new Blob([renderReport(reportDocument(result, notes), reportFormat)], { type: reportFormat==="html"?"text/html;charset=utf-8":"text/markdown;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = `TruthTrace-调查报告.${reportFormat==="html"?"html":"md"}`; downloadUrls.current.add(url); document.body.appendChild(link); link.click(); link.remove();
   }
   async function reanalyze(){setAnalyzing(true);setError("");try{
     const response=await fetch(`/api/cases/${result.caseId}/analyze`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const data=await response.json();
@@ -80,12 +83,13 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
   const sourceChips = (refs: EvidenceRef[]) => [...new Map(refs.map(ref => [ref.evidenceId, ref])).values()].map((ref, index) => <button type="button" key={index} onClick={() => openSource(ref.evidenceId)} title={ref.quote}>{evidence.find(item => item.id === ref.evidenceId)?.name ?? ref.evidenceId} ↗</button>);
 
   return <div ref={shell} className={`contract-shell ${immersive ? "contract-immersive" : ""}`}>
+    {reportPreview&&<section role="dialog" aria-modal="true" aria-label="报告预览" style={{position:"fixed",inset:"5%",zIndex:1000,background:"white",padding:16,display:"flex",flexDirection:"column"}}><button onClick={()=>setReportPreview(false)}>关闭报告预览</button><iframe title="报告内容" sandbox="" srcDoc={renderReport(reportDocument(result,notes),"html")} style={{width:"100%",flex:1,border:0}} /></section>}
     <header className="contract-topbar">
       <button className="contract-brand" onClick={onHome} aria-label="返回案件首页" title="点击咪探长，返回案件首页"><Image src={avatar} alt="咪探长" width={57} height={60} /><span>返回首页</span></button>
       <div className="contract-case-heading"><h1>{result.caseName || analysis.caseTitle}</h1></div>
       <span className={`contract-mode mode-${analysis.analysisMode}`}>{{ mock: "模拟分析", rule: "规则分析", model: "模型分析" }[analysis.analysisMode]}</span>
       <button className="contract-outline investigator-entry" onClick={()=>window.dispatchEvent(new CustomEvent("truthtrace:assistant",{detail:{view:"investigation"}}))}><Search size={18} />自主调查</button>
-      <input ref={upload} type="file" accept="image/*,.pdf,.txt,.md" multiple hidden onChange={event => { void supplement(Array.from(event.target.files || [])); event.target.value = ""; }} /><button className="contract-outline" disabled={busy} onClick={() => upload.current?.click()}><Plus size={14} />{busy ? "正在整理…" : "补充材料"}</button><button className="contract-outline" onClick={exportReport}><Download size={14} />导出报告</button>
+      <input ref={upload} type="file" accept="image/*,.pdf,.txt,.md" multiple hidden onChange={event => { void supplement(Array.from(event.target.files || [])); event.target.value = ""; }} /><button className="contract-outline" disabled={busy} onClick={() => upload.current?.click()}><Plus size={14} />{busy ? "正在整理…" : "补充材料"}</button><label>报告格式<select aria-label="报告格式" value={reportFormat} onChange={event=>setReportFormat(event.target.value as "markdown"|"html")}><option value="markdown">Markdown</option><option value="html">HTML / 打印</option></select></label><button className="contract-outline" onClick={()=>setReportPreview(true)}>预览报告</button><button className="contract-outline" onClick={exportReport}><Download size={14} />导出报告</button>
     </header>
     <div className="contract-import-notice" role="status"><strong>{analysis.analysisMode==="model"?"当前为模型分析，点击连线可查互动依据。":"当前只有材料统计，尚未完成模型分析。"}</strong><button className="contract-outline" disabled={analyzing||busy} onClick={()=>void reanalyze()}>{analyzing?"正在核对原文并整理关系…":analysis.analysisMode==="model"?"重新分析材料":"用模型分析已有材料"}</button>{analysis.analysisMode!=="model"&&<span>无需重新导入；可在底部应用设置中连接模型。</span>}</div>
     {busy && <p className="contract-feedback" role="status">正在整理补充材料，现有结果保留。</p>}{error && <p className="contract-feedback" role="alert">{error}</p>}
