@@ -1,0 +1,10 @@
+import {readFile,writeFile} from 'node:fs/promises';
+const [baselinePath,candidatePath,output='evals/comparison.json']=process.argv.slice(2);
+if(!baselinePath||!candidatePath)throw Error('Usage: node scripts/eval-compare.mjs baseline.json candidate.json [output.json]');
+const [baseline,candidate]=await Promise.all([baselinePath,candidatePath].map(async p=>JSON.parse(await readFile(p,'utf8'))));
+for(const key of ['datasetVersion','adapterVersion','kind'])if(baseline[key]!==candidate[key])throw Error(`Incompatible ${key}`);
+const changes=candidate.results.map(row=>{const before=baseline.results.find(r=>r.id===row.id);if(!before)throw Error(`Missing baseline case ${row.id}`);return {id:row.id,checks:Object.fromEntries(Object.entries(row.checks).map(([name,value])=>[name,{before:before.checks[name],after:value,regression:before.checks[name]===true&&value!==true}]))};});
+if(changes.length!==baseline.results.length)throw Error('Case sets differ');
+await writeFile(output,JSON.stringify({baselineSHA:baseline.sourceSHA,candidateSHA:candidate.sourceSHA,datasetVersion:candidate.datasetVersion,semanticMetrics:'NOT_MEASURED',changes},null,2));
+console.log(`Compared ${changes.length} cases; output ${output}`);
+if(changes.some(c=>Object.values(c.checks).some(v=>v.regression)))process.exitCode=1;
