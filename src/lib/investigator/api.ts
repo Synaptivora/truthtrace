@@ -10,6 +10,8 @@ export async function handle(request:Request, kind:"cases"|"investigations", pat
   try {
     const [id,resource]=path;
     if(request.method==="GET") {
+      if(kind==="cases"&&id&&resource==="evidence"&&path[2]){const version=new URL(request.url).searchParams.get("version");return Response.json(version?store.evidenceVersion(id,path[2],Number(version)):{versions:store.evidenceVersions(id,path[2])});}
+      if(kind==="cases"&&id&&resource==="investigations"&&new URL(request.url).searchParams.get("view")==="summary")return Response.json({tasks:store.taskSummaries(id)});
       if(kind==="cases") return Response.json(!id?{cases:store.cases()}:resource==="investigations"?{tasks:store.tasks(id)}:{case:store.case(id)});
       const task=store.task(id);
       if(resource==="events") {
@@ -20,6 +22,7 @@ export async function handle(request:Request, kind:"cases"|"investigations", pat
       if(resource==="report") {
         const revision=Number(new URL(request.url).searchParams.get("revision")||task.revision);
         const row=store.db.prepare("SELECT body FROM reports WHERE task_id=? AND revision=?").get(id,revision) as {body:string}|undefined;
+        if(!row&&revision!==task.revision)throw new Error("历史报告不存在");
         return new Response(row?.body||report(task),{headers:{"Content-Type":"text/markdown; charset=utf-8","Content-Disposition":'attachment; filename="investigation.md"'}});
       }
       return Response.json({task});

@@ -4,7 +4,7 @@ import { resolve, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { AnalysisResultSchema, EvidenceSchema, type Evidence } from "../contracts";
 import { z } from "zod";
-import { TaskInputSchema, taskStages, type Task, type Segment } from "./contracts";
+import { TaskInputSchema, taskStages, type Task, type Segment, type TaskLease } from "./contracts";
 
 export const CaseSchema = z.object({ caseId: z.string().min(1).default(() => randomUUID()), caseName: z.string().optional(), goal: z.string().max(4000).optional(), evidence: z.array(EvidenceSchema), analysis: AnalysisResultSchema, reviewNotes: z.record(z.string(), z.string()).optional(), notice: z.record(z.string(), z.unknown()).optional() });
 export type SavedCase = z.infer<typeof CaseSchema>;
@@ -27,7 +27,15 @@ export class Store {
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, case_id TEXT, idem TEXT, state TEXT, lease INTEGER, owner TEXT, body TEXT, UNIQUE(case_id,idem));
       CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT, at TEXT, body TEXT);
       CREATE TABLE IF NOT EXISTS reports(task_id TEXT, revision INTEGER, body TEXT, PRIMARY KEY(task_id,revision));`);
+    this.migrate();
   }
+  private migrate(){this.transaction(()=>{
+    const cols=new Set((this.db.prepare("PRAGMA table_info(tasks)").all() as {name:string}[]).map(x=>x.name));
+    for(const name of ["revision","lease_epoch","active_ms","lifetime_active_ms"])if(!cols.has(name))this.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
+    this.db.exec("CREATE TABLE IF NOT EXISTS task_snapshots(id TEXT PRIMARY KEY,body TEXT NOT NULL);CREATE TABLE IF NOT EXISTS task_revisions(task_id TEXT,revision INTEGER,body TEXT,PRIMARY KEY(task_id,revision));");
+    for(const row of this.db.prepare("SELECT body FROM tasks").all() as {body:string}[]){const t=JSON.parse(row.body) as Task;if(t.schemaVersion!==2)this.saveTask(t);}
+    this.db.exec("PRAGMA user_version=2");
+  });}
   workerHeartbeat(id:string) { this.db.prepare("INSERT INTO worker_health VALUES(?,?) ON CONFLICT(id) DO UPDATE SET updated=excluded.updated").run(id,Date.now()); }
   workerReady() {return !!this.db.prepare("SELECT id FROM worker_health WHERE updated>? LIMIT 1").get(Date.now()-10000);}
   removeWorker(id:string) {this.db.prepare("DELETE FROM worker_health WHERE id=?").run(id);}
@@ -37,27 +45,33 @@ export class Store {
   saveCase(input: unknown, insideTransaction=false) {
     const c = CaseSchema.parse(input);
     const write = () => {
+      const old=this.db.prepare("SELECT body FROM cases WHERE id=?").get(c.caseId) as {body:string}|undefined;
+      const before=old?JSON.parse(old.body) as SavedCase:undefined;
       const aliases=new Map<string,string>();
       c.evidence = [...new Map(c.evidence.map(e => {const saved=this.saveEvidence(c.caseId,e);aliases.set(e.id,saved.id);return [saved.id,saved] as const;})).values()];
       for(const collection of [c.analysis.people,c.analysis.relationships,c.analysis.events,c.analysis.contradictions,c.analysis.commitments,c.analysis.evidenceGaps])for(const item of collection)for(const ref of item.evidenceRefs)ref.evidenceId=aliases.get(ref.evidenceId)||ref.evidenceId;
       this.db.prepare("INSERT INTO cases VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(c.caseId, JSON.stringify(c));
+      if(!insideTransaction&&before&&JSON.stringify(before.evidence.map(e=>[e.id,e.kind,e.content]))!==JSON.stringify(c.evidence.map(e=>[e.id,e.kind,e.content])))for(const t of this.tasks(c.caseId)){
+        t.stale={reason:"evidence_changed",since:new Date().toISOString(),evidenceIds:c.evidence.map(e=>e.id)};
+        if(["running","queued"].includes(t.state))t.state="paused";
+        t.owner="";t.lease=0;t.leaseEpoch=(t.leaseEpoch||0)+1;this.saveTask(t);this.event(t.id,{type:"stale",revision:t.revision});
+      }
       return c;
     };
     return insideTransaction?write():this.transaction(write);
   }
   private saveEvidence(caseId: string, e: Evidence) {
     const hash = createHash("sha256").update(e.kind + "\0" + e.content).digest("hex");
-    const same = this.db.prepare("SELECT body FROM evidence WHERE case_id=? AND hash=? ORDER BY version DESC LIMIT 1").get(caseId, hash) as {body:string} | undefined;
-    if (same) return JSON.parse(same.body) as Evidence;
-    const last = this.db.prepare("SELECT MAX(version) AS version FROM evidence WHERE case_id=? AND id=?").get(caseId, e.id) as {version:number|null};
-    const version = (last.version || 0) + 1;
+    const last=this.db.prepare("SELECT version,hash FROM evidence WHERE case_id=? AND id=? ORDER BY version DESC LIMIT 1").get(caseId,e.id) as {version:number;hash:string}|undefined;
+    const version=last?.hash===hash?last.version:(last?.version||0)+1;
+    const saved={...e,version};if(last?.hash===hash)return saved;
     try { writeFileSync(join(this.directory, "objects", hash), e.content, { flag: "wx" }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-    this.db.prepare("INSERT INTO evidence VALUES(?,?,?,?,?)").run(caseId, e.id, version, hash, JSON.stringify(e));
-    return e;
+    this.db.prepare("INSERT INTO evidence VALUES(?,?,?,?,?)").run(caseId, e.id, version, hash, JSON.stringify(saved));
+    return saved;
   }
   snapshot(caseId: string): Segment[] {
     return this.case(caseId).evidence.flatMap(e => {
-      const last = this.db.prepare("SELECT MAX(version) AS version FROM evidence WHERE case_id=? AND id=?").get(caseId,e.id) as {version:number};
+      const last = {version:(e as Evidence & {version?:number}).version||(this.db.prepare("SELECT MAX(version) AS version FROM evidence WHERE case_id=? AND id=?").get(caseId,e.id) as {version:number}).version};
       const segments: Segment[] = [];
       // Exact character ranges remain valid even when a parser supplies no page/message coordinates.
       const size = e.kind === "image" ? e.content.length : 4000;
@@ -65,8 +79,16 @@ export class Store {
       return segments;
     });
   }
-  task(id: string): Task { const row = this.db.prepare("SELECT body FROM tasks WHERE id=?").get(id) as {body:string} | undefined; if (!row) throw new Error("任务不存在"); return JSON.parse(row.body); }
-  tasks(caseId: string): Task[] { return (this.db.prepare("SELECT body FROM tasks WHERE case_id=? ORDER BY rowid DESC").all(caseId) as {body:string}[]).map(r=>JSON.parse(r.body)); }
+  task(id:string):Task{
+    const r=this.db.prepare("SELECT * FROM tasks WHERE id=?").get(id) as {body:string;state:Task["state"];owner:string;lease:number;revision:number;lease_epoch:number;active_ms:number;lifetime_active_ms:number}|undefined;if(!r)throw new Error("任务不存在");
+    const t=JSON.parse(r.body) as Task;
+    if(t.snapshotId){const snap=this.db.prepare("SELECT body FROM task_snapshots WHERE id=?").get(t.snapshotId) as {body:string}|undefined;if(!snap)throw new Error("快照缺失");t.snapshot=JSON.parse(snap.body);}
+    return {...t,state:r.state,owner:r.owner,lease:r.lease,revision:r.revision,leaseEpoch:r.lease_epoch,activeMs:r.active_ms,lifetimeActiveMs:r.lifetime_active_ms};
+  }
+  tasks(caseId:string):Task[]{return (this.db.prepare("SELECT id FROM tasks WHERE case_id=? ORDER BY rowid DESC").all(caseId) as {id:string}[]).map(r=>this.task(r.id));}
+  taskSummaries(caseId:string){return (this.db.prepare("SELECT id,state,revision,body FROM tasks WHERE case_id=? ORDER BY rowid DESC").all(caseId) as {id:string;state:string;revision:number;body:string}[]).map(r=>{const t=JSON.parse(r.body);return {id:r.id,state:r.state,revision:r.revision,goal:t.goal,step:t.step,mode:t.mode,stale:t.stale,modelCalls:t.modelCalls,toolCalls:t.toolCalls,snapshotId:t.snapshotId};});}
+  evidenceVersion(caseId:string,id:string,version:number){this.case(caseId);if(!Number.isSafeInteger(version)||version<1)throw new Error("无效版本");const r=this.db.prepare("SELECT version,hash,body FROM evidence WHERE case_id=? AND id=? AND version=?").get(caseId,id,version) as {version:number;hash:string;body:string}|undefined;if(!r)throw new Error("版本不存在");return {evidence:{...JSON.parse(r.body),version:r.version},version:r.version,hash:r.hash};}
+  evidenceVersions(caseId:string,id:string){this.case(caseId);return this.db.prepare("SELECT version,hash FROM evidence WHERE case_id=? AND id=? ORDER BY version").all(caseId,id);}
   createTask(caseId:string, input:unknown): Task {
     const data = TaskInputSchema.parse(input);
     return this.transaction(() => {
@@ -74,30 +96,35 @@ export class Store {
       if(existing) return this.task(existing.id);
       if(this.tasks(caseId).some(t=>["queued","running","waiting_user","paused"].includes(t.state))) throw new Error("本案已有未结束调查，请先继续或取消该任务");
       const task: Task = {id:randomUUID(),caseId,goal:data.goal,mode:data.mode,scope:data.scope,state:"queued",step:0,revision:1,modelCalls:0,toolCalls:0,activeMs:0,error:"",snapshot:this.snapshot(caseId),artifacts:[],reads:[],decisions:[],createdAt:new Date().toISOString(),lease:0,owner:""};
-      this.db.prepare("INSERT INTO tasks VALUES(?,?,?,?,?,?,?)").run(task.id,caseId,data.idempotencyKey,task.state,0,"",JSON.stringify(task));
-      this.event(task.id,{type:"created"}); return task;
+      this.db.prepare("INSERT INTO tasks(id,case_id,idem,state,lease,owner,body) VALUES(?,?,?,?,?,?,?)").run(task.id,caseId,data.idempotencyKey,task.state,0,"",JSON.stringify(task));
+      this.saveTask(task);this.event(task.id,{type:"created"}); return this.task(task.id);
     });
   }
-  saveTask(t:Task) { this.db.prepare("UPDATE tasks SET state=?,lease=?,owner=?,body=? WHERE id=?").run(t.state,t.lease,t.owner,JSON.stringify(t),t.id); }
+  saveTask(t:Task){const snapshot=JSON.stringify(t.snapshot);const snapshotId=createHash("sha256").update(snapshot).digest("hex");this.db.prepare("INSERT OR IGNORE INTO task_snapshots VALUES(?,?)").run(snapshotId,snapshot);
+    const body={...t,schemaVersion:2,snapshotId,snapshot:undefined,lifetimeModelCalls:t.lifetimeModelCalls??t.modelCalls,lifetimeToolCalls:t.lifetimeToolCalls??t.toolCalls,lifetimeActiveMs:t.lifetimeActiveMs??t.activeMs};
+    this.db.prepare("UPDATE tasks SET state=?,lease=?,owner=?,body=?,revision=?,lease_epoch=?,active_ms=?,lifetime_active_ms=? WHERE id=?").run(t.state,t.lease,t.owner,JSON.stringify(body),t.revision,t.leaseEpoch||0,t.activeMs,body.lifetimeActiveMs,t.id);
+  }
+  lease(t:Task):TaskLease{return {taskId:t.id,owner:t.owner,revision:t.revision,leaseEpoch:t.leaseEpoch||0};}
+  renewLease(l:TaskLease,now=Date.now(),elapsed=0){return this.db.prepare("UPDATE tasks SET lease=?,active_ms=active_ms+?,lifetime_active_ms=lifetime_active_ms+? WHERE id=? AND owner=? AND revision=? AND lease_epoch=? AND state='running' AND lease>=?").run(now+30000,elapsed,elapsed,l.taskId,l.owner,l.revision,l.leaseEpoch,now).changes===1;}
+  saveReport(l:TaskLease,body:string):void{if(!this.db.isTransaction){this.transaction(()=>this.saveReport(l,body));return;}const t=this.task(l.taskId);if(t.owner!==l.owner||t.revision!==l.revision||t.leaseEpoch!==l.leaseEpoch||t.lease<Date.now())throw new Error("报告租约失效");this.db.prepare("INSERT INTO reports VALUES(?,?,?) ON CONFLICT(task_id,revision) DO UPDATE SET body=excluded.body").run(t.id,t.revision,body);}
   event(id:string, body:unknown) { this.db.prepare("INSERT INTO events(task_id,at,body) VALUES(?,?,?)").run(id,new Date().toISOString(),JSON.stringify(body)); }
   events(id:string, after=0) { this.task(id); return this.db.prepare("SELECT seq,at,body FROM events WHERE task_id=? AND seq>? ORDER BY seq LIMIT 200").all(id,after); }
   claim(owner:string): Task | undefined {
     return this.transaction(() => {
       const row = this.db.prepare("SELECT id FROM tasks WHERE state='queued' OR (state='running' AND lease<?) ORDER BY rowid LIMIT 1").get(Date.now()) as {id:string}|undefined;
       if(!row) return;
-      const t=this.task(row.id); t.state="running"; t.owner=owner; t.lease=Date.now()+30000; this.saveTask(t); return t;
+      const t=this.task(row.id); t.state="running";t.leaseEpoch=(t.leaseEpoch||0)+1; t.owner=owner; t.lease=Date.now()+30000; this.saveTask(t); return t;
     });
   }
-  owned(id:string,owner:string,fn:(t:Task)=>void) {
-    return this.transaction(()=>{const t=this.task(id); if(t.state!=="running"||t.owner!==owner||t.lease<Date.now()) return false; fn(t); this.saveTask(t); return true;});
-  }
+  owned(l:TaskLease,fn:(t:Task)=>void){return this.transaction(()=>{const t=this.task(l.taskId);if(t.state!=="running"||t.owner!==l.owner||t.revision!==l.revision||t.leaseEpoch!==l.leaseEpoch||t.lease<Date.now())return false;const calls=t.modelCalls,tools=t.toolCalls;fn(t);t.lifetimeModelCalls=(t.lifetimeModelCalls??calls)+Math.max(0,t.modelCalls-calls);t.lifetimeToolCalls=(t.lifetimeToolCalls??tools)+Math.max(0,t.toolCalls-tools);this.saveTask(t);return true;});}
   action(id:string,action:string,goal?:string) {
     return this.transaction(()=>{
       const t=this.task(id);
+      this.db.prepare("INSERT OR IGNORE INTO task_revisions VALUES(?,?,?)").run(t.id,t.revision,JSON.stringify(t));
       if(action==="pause" && ["running","queued","waiting_user"].includes(t.state)) t.state="paused";
       else if(action==="cancel" && t.state!=="completed") t.state="cancelled";
       else if(["resume","retry"].includes(action) && ["paused","failed","waiting_user"].includes(t.state)) { t.state="queued"; t.error=""; }
-      else if(action==="revise") { if(this.tasks(t.caseId).some(other=>other.id!==t.id&&["queued","running","waiting_user","paused"].includes(other.state)))throw new Error("本案已有其他正在进行的调查"); t.goal=goal?.trim()||t.goal; t.snapshot=this.snapshot(t.caseId); t.artifacts=[]; t.reads=[]; t.step=0; t.revision++; t.modelCalls=0;t.toolCalls=0;t.activeMs=0;t.collectedSources=0;t.collectionNotes=[];t.error="";t.state="queued"; }
+      else if(action==="revise") { if(this.tasks(t.caseId).some(other=>other.id!==t.id&&["queued","running","waiting_user","paused"].includes(other.state)))throw new Error("本案已有其他正在进行的调查"); t.stale=undefined;t.goal=goal?.trim()||t.goal; t.snapshot=this.snapshot(t.caseId); t.artifacts=[]; t.reads=[]; t.step=0; t.revision++; t.modelCalls=0;t.toolCalls=0;t.activeMs=0;t.collectedSources=0;t.collectionNotes=[];t.error="";t.state="queued"; }
       else throw new Error("当前状态不支持此操作");
       t.owner=""; t.lease=0; this.saveTask(t);this.event(id,{type:"action",action});return t;
     });

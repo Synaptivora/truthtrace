@@ -112,15 +112,15 @@ export function report(t:Task): string {
 }
 
 export async function runTask(store:Store, initial:Task, invoke= modelStep) {
-  const owner=initial.owner;
+  const lease=store.lease(initial);
   const abort=new AbortController();
   let last=Date.now();
   const heartbeat=setInterval(()=>{
     const now=Date.now();
-    const ok=store.owned(initial.id,owner,t=>{t.lease=now+30000;t.activeMs+=now-last;});last=now;
+    const ok=store.renewLease(lease,now,now-last);last=now;
     if(!ok) abort.abort();
   },2000);
-  function checkpoint(fn:(t:Task)=>void) {if(!store.owned(initial.id,owner,fn)) throw new Error("任务已暂停、取消或租约已失效");}
+  function checkpoint(fn:(t:Task)=>void) {if(!store.owned(lease,fn)) throw new Error("任务已暂停、取消或租约已失效");}
   try {
     const config=resolveConnection(undefined,"investigation");
     if(!config?.tools) throw new Error("自主调查需要服务端模型连接及工具调用能力，请配置 AGENT_* 后重试");
@@ -146,7 +146,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
         checkpoint(current=>{
           const pending=current.artifacts.flatMap(a=>a.decisions).some(d=>!current.decisions.some(v=>v.id===d.id));
           current.state=pending?"waiting_user":"completed";
-          store.db.prepare("INSERT INTO reports VALUES(?,?,?) ON CONFLICT(task_id,revision) DO UPDATE SET body=excluded.body").run(current.id,current.revision,report(current));
+          store.saveReport(lease,report(current));
           store.event(current.id,{type:"report",state:current.state,revision:current.revision});
         }); break;
       }
@@ -160,7 +160,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
         const submitOnly=round>=3;
         if(submitOnly)messages.push({role:"user",content:`本阶段剩余 ${5-round} 次提交机会。停止探索，使用 ${stageActions[t.step]} 提交已得到的结果；不足之处列出gaps，不能编造。`});
         checkpoint(current=>{
-          if(current.modelCalls>=40||current.toolCalls>=120||current.activeMs>=1800000) {current.state="paused";current.error="调查预算已耗尽，请缩小目标后创建新修订";return;}
+          if(current.modelCalls>=40||current.toolCalls>=120||current.activeMs>=1800000||(current.lifetimeModelCalls??0)>=120||(current.lifetimeToolCalls??0)>=360||(current.lifetimeActiveMs??0)>=5400000) {current.state="paused";current.error="调查预算已耗尽，请缩小目标后创建新修订";return;}
           current.modelCalls++;
         });
         if(store.task(t.id).state!=="running") break;
@@ -169,7 +169,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
           try {result=await invoke(config,messages,investigationTools(t.step,submitOnly),AbortSignal.any([abort.signal,AbortSignal.timeout(120000)]));break;}
           catch(e) {
             if(abort.signal.aborted||attempt>=2||!(e instanceof TypeError||e instanceof Error&&/HTTP (429|5\d\d)|timeout/i.test(e.message)))throw e;
-            checkpoint(c=>{if(c.modelCalls>=40)throw new Error("模型预算已耗尽");c.modelCalls++;});
+            checkpoint(c=>{if(c.modelCalls>=40||(c.lifetimeModelCalls??0)>=120)throw new Error("模型预算已耗尽");c.modelCalls++;});
             await new Promise(r=>setTimeout(r,1000*(attempt+1)));
           }
         }
@@ -177,7 +177,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
         if(!result.calls.length) {messages.push({role:"user",content:"请用工具提交结构化成果；如材料不足，将原因列在gaps内。"});continue;}
         messages.push({role:"assistant",content:result.text,calls:result.calls,raw:result.raw});
         for(const call of result.calls) {
-          checkpoint(current=>{if(current.toolCalls>=120) throw new Error("工具预算已耗尽");current.toolCalls++;});
+          checkpoint(current=>{if(current.toolCalls>=120||(current.lifetimeToolCalls??0)>=360) throw new Error("工具预算已耗尽");current.toolCalls++;});
           let output:unknown;let image:string|undefined;
           try {
             const args=JSON.parse(call.arguments);
@@ -210,7 +210,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
               else {checkpoint(c=>{if(!c.reads.includes(s.id))c.reads.push(s.id);});output=s;}
             } else if(call.name==="submit_artifact"||call.name===stageActions[t.step]) {
               const artifact=validateArtifact(current,args);
-              checkpoint(c=>{c.artifacts.push(artifact);c.step=taskStages(c.mode).find(stage=>stage>c.step) ?? skillNames.length;store.event(c.id,{type:"step_completed",skill:name,version:1});});
+              checkpoint(c=>{if(c.step!==t.step)throw new Error("阶段已提交");c.artifacts.push(artifact);c.step=taskStages(c.mode).find(stage=>stage>c.step) ?? skillNames.length;store.event(c.id,{type:"step_completed",skill:name,version:1});});
               submitted=true; output={saved:true};
             } else throw new Error("未知工具");
           } catch(e) {output={error:e instanceof Error?e.message:"工具参数无效"};}
@@ -223,7 +223,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
       }
       if(!submitted) {checkpoint(c=>{c.state="paused";c.error=`${name} 达到执行预算，已保留进度`;});break;}
     }
-  } catch(e) {store.owned(initial.id,owner,t=>{t.state="failed";const failure=safeError(e);t.error=failure.error;store.event(t.id,{type:"failed",code:failure.code});});}
+  } catch(e) {store.owned(lease,t=>{t.state="failed";const failure=safeError(e);t.error=failure.error;store.event(t.id,{type:"failed",code:failure.code});});}
   finally {clearInterval(heartbeat);}
 }
 
