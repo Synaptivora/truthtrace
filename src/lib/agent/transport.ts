@@ -1,10 +1,15 @@
+import { randomUUID } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+import { request as httpsRequest } from "node:https";
+import { request as httpRequest } from "node:http";
 import { z } from "zod";
 import type { Connection } from "./providers";
 
 export type Tool = { name: string; description: string; parameters: Record<string, unknown> };
 export type Call = { id: string; name: string; arguments: string };
 export type Message = { role: "system" | "user" | "assistant" | "tool"; content: string; image?: string; calls?: Call[]; callId?: string; raw?: unknown };
-export type Step = { text: string; calls: Call[]; raw: unknown };
+export type Step = { text: string; calls: Call[]; raw: unknown; usage?: { inputTokens: number|null; outputTokens: number|null }; capabilities?: { text: "observed"|"unknown"; tools: "observed"|"unknown"; vision: "unknown" } };
 const object = z.record(z.string(), z.unknown());
 const callSchema = z.object({ id: z.string(), function: z.object({ name: z.string(), arguments: z.string() }) });
 
@@ -60,11 +65,61 @@ export function parseStep(protocol: Connection["protocol"], data: unknown): Step
 
 export async function modelStep(config: Connection, messages: Message[], tools: Tool[], signal: AbortSignal): Promise<Step> {
   const wire = wireRequest(config, messages, tools);
-  const response = await fetch(config.baseUrl + wire.path, { method: "POST", redirect: "error", headers: { "Content-Type": "application/json", ...wire.headers }, body: JSON.stringify(wire.body), signal });
+  const response = await secureModelRequest(new URL(config.baseUrl + wire.path), { "Content-Type": "application/json", ...wire.headers }, JSON.stringify(wire.body), signal);
   if (!response.ok) {
     // Do not expose upstream bodies: some providers echo credentials or evidence.
     const hints: Record<number, string> = { 401: "API Key 无效或与地域不匹配", 402: "账户余额不足，请在模型供应商控制台充值", 403: "账号无权调用该模型", 404: "模型名称、协议或 API 地址不正确", 429: "请求过于频繁或额度受限，请稍后重试", 400: "请求不兼容：请检查协议、模型及工具调用支持" };
-    throw new Error(`模型服务 HTTP ${response.status}：${hints[response.status] ?? "服务暂时不可用，请稍后重试"}`);
+    throw new ModelTransportError("MODEL_HTTP", `模型服务 HTTP ${response.status}：${hints[response.status] ?? "服务暂时不可用，请稍后重试"}`, response.status===429||response.status>=500);
   }
-  return parseStep(config.protocol, await response.json());
+  try {
+    const data = await response.json();
+    const step = parseStep(config.protocol, data);
+    const count=(v:unknown)=>typeof v==="number"&&Number.isSafeInteger(v)&&v>=0?v:null;
+    const usage=data?.usage;
+    return {...step,usage:{inputTokens:count(usage?.input_tokens??usage?.prompt_tokens),outputTokens:count(usage?.output_tokens??usage?.completion_tokens)},capabilities:{text:step.text?"observed":"unknown",tools:step.calls.length?"observed":"unknown",vision:"unknown"}};
+  } catch { throw new ModelTransportError("MODEL_RESPONSE","模型响应格式无效或未完成"); }
 }
+
+// Conservative public-address policy: IPv6 global unicast only; reject transition
+// ranges so IPv4 restrictions cannot be bypassed through mapped/tunnel addresses.
+export function publicModelAddress(address: string): boolean {
+  if (isIP(address) === 4) {
+    const [a,b] = address.split(".").map(Number);
+    return !(a===0 || a===10 || a===127 || a>=224 || a===169&&b===254 || a===172&&b>=16&&b<=31 || a===192&&(b===168||b===0||b===2) || a===100&&b>=64&&b<=127 || a===198&&(b===18||b===19||b===51) || a===203&&b===0);
+  }
+  return isIP(address)===6 && /^[23]/i.test(address) && !/^200[12]:/i.test(address) && !/^2001:/i.test(address) && !/^3fff:/i.test(address);
+}
+export class ModelTransportError extends Error {
+  readonly traceId=randomUUID();
+  constructor(public code: string, message: string, public retryable=false) { super(message); this.name="ModelTransportError"; }
+}
+export async function secureModelRequest(url: URL, headers: Record<string,string>, body: string, signal: AbortSignal): Promise<Response> {
+  const deadline=AbortSignal.any([signal,AbortSignal.timeout(60000)]);
+  if(deadline.aborted)throw new ModelTransportError(signal.aborted?"MODEL_CANCELLED":"MODEL_TIMEOUT","模型请求已取消或超时");
+  const allowed=(process.env.TRUTHTRACE_MODEL_PRIVATE_ORIGINS??"").split(",").map(s=>s.trim()).includes(url.origin);
+  if(url.username||url.password||url.search||url.hash||!(url.protocol==="https:"||allowed&&url.protocol==="http:"))throw new ModelTransportError("MODEL_DESTINATION","模型目的地址未授权");
+  const host=url.hostname.replace(/^\[|\]$/g,"");
+  // DNS also observes the total deadline; late results are never used.
+  const addresses=await new Promise<Awaited<ReturnType<typeof lookup>>|{address:string;family:number}[]>((resolve,reject)=>{
+    const cancel=()=>reject(new ModelTransportError(signal.aborted?"MODEL_CANCELLED":"MODEL_TIMEOUT","模型请求已取消或超时"));
+    deadline.addEventListener("abort",cancel,{once:true});
+    lookup(host,{all:true,verbatim:true}).then(resolve,()=>reject(new ModelTransportError("MODEL_NETWORK","模型连接失败",true))).finally(()=>deadline.removeEventListener("abort",cancel));
+  });
+  const list=Array.isArray(addresses)?addresses:[addresses];
+  if(!list.length||!allowed&&list.some(a=>!publicModelAddress(a.address)))throw new ModelTransportError("MODEL_DESTINATION","模型目的地址未授权");
+  if(deadline.aborted)throw new ModelTransportError(signal.aborted?"MODEL_CANCELLED":"MODEL_TIMEOUT","模型请求已取消或超时");
+  const selected=list[0];
+  return new Promise((resolve,reject)=>{
+    const request=url.protocol==="https:"?httpsRequest:httpRequest;
+    const req=request(url,{method:"POST",agent:false,family:selected.family,headers,signal:deadline,lookup:(_host,options,callback)=>{if(options.all)callback(null,[selected]);else callback(null,selected.address,selected.family);}},res=>{
+      const chunks:Buffer[]=[];let size=0;
+      res.on("data",(chunk:Buffer)=>{size+=chunk.length;if(size>8*1024*1024){req.destroy();reject(new ModelTransportError("MODEL_SIZE","模型响应超过大小限制"));}else chunks.push(chunk);});
+      res.on("error",()=>reject(new ModelTransportError("MODEL_NETWORK","模型响应中断",true)));
+      res.on("end",()=>resolve(new Response([204,205,304].includes(res.statusCode??502)?null:Buffer.concat(chunks),{status:res.statusCode??502})));
+    });
+    req.on("error",()=>reject(new ModelTransportError(deadline.aborted?(signal.aborted?"MODEL_CANCELLED":"MODEL_TIMEOUT"):"MODEL_NETWORK",deadline.aborted?"模型请求已取消或超时":"模型连接失败",!deadline.aborted)));
+    req.end(body);
+  });
+}
+
+

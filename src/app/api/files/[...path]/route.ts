@@ -1,3 +1,5 @@
+import { ingestionFetch } from "@/lib/ingestion/service";
+import { secureRoute } from "@/lib/security/boundary";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -15,7 +17,7 @@ function baseUrl(): string {
   return (process.env.INGESTION_SERVICE_URL || "").replace(/\/$/, "");
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ path: string[] }> }) {
+async function rawGET(_request: Request, context: { params: Promise<{ path: string[] }> }) {
   const base = baseUrl();
   if (!base) {
     return NextResponse.json(
@@ -31,7 +33,7 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
   }
 
   try {
-    const upstream = await fetch(`${base}/files/${stored}`, { signal: AbortSignal.timeout(300_000) });
+    const upstream = await ingestionFetch(`${base}/files/${stored}`, { signal: AbortSignal.timeout(300_000) });
     if (!upstream.ok || !upstream.body) {
       return NextResponse.json({ error: "原件不可用或已被清理" }, { status: upstream.status || 502 });
     }
@@ -48,3 +50,5 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
     );
   }
 }
+
+export const GET = secureRoute(rawGET);

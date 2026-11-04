@@ -1,0 +1,19 @@
+name: Agent evaluation fixtures
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/eval-fixtures.mjs
+      - run: npm ci
+      - run: npx tsx scripts/eval-production.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-production-evaluation
+          path: evals/offline-result.json

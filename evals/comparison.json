@@ -1,0 +1,563 @@
+{
+  "baselineSHA": "6de389a63776ec108031f603bc49c1387a254d59",
+  "candidateSHA": "4452e9f8d31cfa9caac3e773b524331c8f1e56ba",
+  "datasetVersion": "tt-fictional-v1",
+  "semanticMetrics": "NOT_MEASURED",
+  "changes": [
+    {
+      "id": "TT-E001",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E002",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E003",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E004",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E005",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E006",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E007",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E008",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E009",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E010",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E011",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E012",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E013",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E014",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E015",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E016",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E017",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E018",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E019",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E020",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E021",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E022",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E023",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E024",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E025",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E026",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E027",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E028",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E029",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E030",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E031",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "TT-E032",
+      "checks": {
+        "citationIdentityAndExcerpt": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "nonemptyResult": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "runtime-fact-valid",
+      "checks": {
+        "completed": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "runtime-fact-adversarial",
+      "checks": {
+        "completed": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "crossStageRejected": {
+          "before": false,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "runtime-timeline-valid",
+      "checks": {
+        "completed": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "runtime-timeline-adversarial",
+      "checks": {
+        "completed": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "crossStageRejected": {
+          "before": false,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "runtime-deep-valid",
+      "checks": {
+        "completed": {
+          "before": true,
+          "after": true,
+          "regression": false
+        }
+      }
+    },
+    {
+      "id": "runtime-deep-adversarial",
+      "checks": {
+        "completed": {
+          "before": true,
+          "after": true,
+          "regression": false
+        },
+        "crossStageRejected": {
+          "before": false,
+          "after": true,
+          "regression": false
+        }
+      }
+    }
+  ]
+}

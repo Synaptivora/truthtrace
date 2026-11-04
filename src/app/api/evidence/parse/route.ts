@@ -1,3 +1,4 @@
+import { secureRoute } from "@/lib/security/boundary";
 import { NextResponse } from "next/server";
 import { parseEvidenceFile } from "@/lib/ingestion/parser";
 import { saveOriginal } from "@/lib/investigator/store";
@@ -6,7 +7,7 @@ import { ensureIngestion } from "@/lib/ingestion/service";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+async function rawPOST(request: Request) {
   try {
     const formData = await request.formData();
     const files = formData.getAll("files").filter((item): item is File => item instanceof File);
@@ -33,3 +34,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 422 });
   }
 }
+
+export const POST = secureRoute(rawPOST);

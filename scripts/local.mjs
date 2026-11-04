@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -49,7 +50,7 @@ const envLocal = loadEnvLocal();
 const INGESTION_URL = envLocal.INGESTION_SERVICE_URL
   || process.env.INGESTION_SERVICE_URL || 'http://127.0.0.1:8000';
 const INGESTION_PORT = new URL(INGESTION_URL).port || '8000';
-const env = { ...process.env, ...envLocal, INGESTION_SERVICE_URL: INGESTION_URL };
+const env = { ...process.env, ...envLocal, INGESTION_SERVICE_URL: INGESTION_URL, TRUTHTRACE_INGESTION_TOKEN: envLocal.TRUTHTRACE_INGESTION_TOKEN || process.env.TRUTHTRACE_INGESTION_TOKEN || randomBytes(32).toString("hex"), TRUTHTRACE_LOCAL_BOOTSTRAP: "1", TRUTHTRACE_SESSION_SECRET: randomBytes(32).toString("hex") };
 
 // 全局 npm 装不上时，setup.mjs 会把工具装到 ~/.synapse/tools/npm；
 // 把它的 .bin 加进 PATH，Python 的 shutil.which("dws") 才能找到。

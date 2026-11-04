@@ -1,7 +1,15 @@
+import {spawn} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
+const fixtureToken=crypto.randomUUID()+crypto.randomUUID();
+const dir=await fs.mkdtemp(join(tmpdir(),'truthtrace-agent-'));
+const base='http://127.0.0.1:18764';
+const app=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','18764'],{env:{...process.env,PORT:'18764',TRUTHTRACE_DATA_DIR:dir,TRUTHTRACE_MODE:'local',TRUTHTRACE_LOCAL_BOOTSTRAP:'1',TRUTHTRACE_SESSION_SECRET:fixtureToken,TRUTHTRACE_MACHINE_TOKEN:fixtureToken,TRUTHTRACE_INGESTION_TOKEN:fixtureToken,AGENT_PROVIDER:'mock',AI_PROVIDER:'rule',AGENT_API_KEY:'',AI_API_KEY:'',TRUTHTRACE_MODEL_PRIVATE_ORIGINS:'http://127.0.0.1:18765'},windowsHide:true,stdio:'pipe'});
+let logs='';app.stdout.on('data',s=>logs+=s);app.stderr.on('data',s=>logs+=s);
 const requests=[];
 const output='artifacts/agent'; await fs.mkdir(output,{recursive:true});
 const server=http.createServer(async(req,res)=>{
@@ -22,9 +30,10 @@ const server=http.createServer(async(req,res)=>{
 await new Promise(r=>server.listen(18765,'127.0.0.1',r));
 const browser=await chromium.launch({headless:true});
 const page=await browser.newPage({viewport:{width:1440,height:1000}});
-const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const errors=[];await page.route('**/api/source/**',route=>route.fulfill({status:503,json:{error:'Offline fixture: unconfigured channel route'}}));await page.route('**/api/setup**',route=>route.fulfill({status:503,json:{error:'Offline fixture: installation disabled'}}));page.on('pageerror',e=>errors.push(e.message));
 try {
- await page.goto(process.env.AGENT_TEST_URL || 'http://localhost:3000',{waitUntil:'networkidle'});
+ for(let i=0;i<60;i++){try{if((await fetch(base)).ok)break;}catch{}await new Promise(r=>setTimeout(r,250));}
+ await page.goto(base,{waitUntil:'networkidle'});
  await page.getByRole('button',{name:'和咪探长聊聊'}).click();
  await page.getByLabel('输入问题').fill('你好');await page.getByRole('button',{name:'发送',exact:true}).click();
  await page.getByText('本地演示 · 非模型判断',{exact:true}).waitFor();
@@ -74,4 +83,4 @@ try {
  const storage=await page.evaluate(()=>JSON.stringify({local:{...localStorage},session:{...sessionStorage}}));
  assert(!storage.includes('browser-test-secret'));assert.equal(errors.length,0,errors.join('\n'));
  console.log(JSON.stringify({pass:true,protocols:['openai','anthropic','responses'],requests:requests.length,consoleErrors:errors}));
-} catch(error) { await page.screenshot({path:output+'/failure.png',fullPage:true}); throw error; } finally {await browser.close();server.closeAllConnections();server.close();}
+} catch(error) { console.error(logs);await page.screenshot({path:output+'/failure.png',fullPage:true}); throw error; } finally {app.kill();console.log('Isolated test data:',dir);await browser.close();server.closeAllConnections();server.close();}

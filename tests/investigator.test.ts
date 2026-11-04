@@ -21,7 +21,7 @@ describe("investigator durability and provenance",()=>{
     store.saveCase({caseId:"case1",evidence:[evidence,{...evidence,id:"e2",content:"尚未到账"}],analysis});
     const next=store.action(t.id,"revise");
     expect(next.revision).toBe(2);expect(next.snapshot).toHaveLength(2);expect(next.state).toBe("queued");
-    expect(store.owned(t.id,"old-worker",task=>{task.step=8;})).toBe(false);
+    expect(store.owned({...store.lease(t),owner:"old-worker"},task=>{task.step=8;})).toBe(false);
   });
   it("detects live worker heartbeats and expires stale workers",()=>{
     expect(store.workerReady()).toBe(false);store.workerHeartbeat("worker");expect(store.workerReady()).toBe(true);
@@ -73,23 +73,30 @@ describe("investigator durability and provenance",()=>{
     store.saveCase({caseId:"case1",evidence:[{...evidence,content:"周六退款"}],analysis});expect(store.snapshot("case1")[0].version).toBe(2);expect(store.task(t.id).snapshot[0].content).toContain("周五");
   });
   it("rejects late results after pause and allows lease recovery",()=>{
-    const t=create();store.claim("first");store.action(t.id,"pause");expect(store.owned(t.id,"first",v=>{v.step=8;})).toBe(false);
+    const t=create();store.claim("first");store.action(t.id,"pause");expect(store.owned({...store.lease(t),owner:"first"},v=>{v.step=8;})).toBe(false);
     store.action(t.id,"resume");const resumed=store.claim("second")!;expect(resumed.step).toBe(0);
-    resumed.lease=Date.now()-1;store.saveTask(resumed);expect(store.claim("third")?.owner).toBe("third");expect(store.owned(t.id,"second",()=>{})).toBe(false);
+    resumed.lease=Date.now()-1;store.saveTask(resumed);expect(store.claim("third")?.owner).toBe("third");expect(store.owned({...store.lease(t),owner:"second"},()=>{})).toBe(false);
   });
   it("requires alternative explanations for conflicts",()=>{
     const t=create();t.step=5;t.artifacts=[ArtifactSchema.parse({summary:"",claims:[{id:"a",content:"a",kind:"statement",refs:[{evidenceId:"e1",version:1,segmentId:"x",quote:"a"}]},{id:"b",content:"b",kind:"statement",refs:[{evidenceId:"e1",version:1,segmentId:"x",quote:"b"}]}]})];
     expect(()=>validateArtifact(t,{summary:"",conflicts:[{id:"conflict",content:"可能冲突",claimIds:["a","b"]}]})).toThrow("替代解释");
+  });
+  it("does not persist raw tool evidence or arbitrary failures in audit events",async()=>{
+    const t=create(),leased=store.claim("worker")!;
+    await runTask(store,leased,async()=>{throw new Error("PRIVATE secret /local/private/path");});
+    expect(store.task(t.id).error).not.toContain("PRIVATE");
+    expect(JSON.stringify(store.events(t.id))).not.toContain("PRIVATE");
   });
   it("executes eight skills with read-before-claim and produces a traceable report",async()=>{
     const t=create();const leased=store.claim("worker")!;
     const invoke:typeof modelStep=async()=>{
       const current=store.task(t.id),s=current.snapshot[0];
       if(current.step===2&&!current.reads.length)return {text:"",raw:undefined,calls:[{id:"read",name:"read_evidence",arguments:JSON.stringify({segmentId:s.id})}]};
-      const a=ArtifactSchema.parse({summary:"阶段完成",...(current.step===0?{plan:["查找退款承诺并核实履行"]}:{}),...(current.step===2?{claims:[{id:"c1",content:"小王说周五退款",kind:"statement",refs:[{evidenceId:s.evidenceId,version:s.version,segmentId:s.id,quote:"周五退款"}]}]}:{}),...(current.step===6?{checks:[{claimId:"c1",status:"supported",reason:"原文支持承诺存在，不证明已经履行"}]}:{}),gaps:["缺少实际到账记录"]});
+      const a={summary:"阶段完成",...(current.step===0?{plan:["查找退款承诺并核实履行"]}:{}),...(current.step===2?{claims:[{id:"c1",content:"小王说周五退款",kind:"statement",refs:[{evidenceId:s.evidenceId,version:s.version,segmentId:s.id,quote:"周五退款"}]}]}:{}),...(current.step===6?{checks:[{claimId:"c1",status:"supported",reason:"原文支持承诺存在，不证明已经履行"}]}:{}),gaps:["缺少实际到账记录"]};
       return {text:"",raw:undefined,calls:[{id:`step${current.step}`,name:"submit_artifact",arguments:JSON.stringify(a)}]};
     };
     await runTask(store,leased,invoke);const done=store.task(t.id);expect(done.error).toBe("");expect(done.state).toBe("completed");expect(done.step).toBe(8);
+    expect(JSON.stringify(store.events(t.id))).not.toContain("周五退款");
     const row=store.db.prepare("SELECT body FROM reports WHERE task_id=?").get(t.id) as {body:string};expect(row.body).toContain("e1 v1");expect(row.body).toContain("缺少实际到账记录");
   });
   it("does not commit a model response that arrives after cancellation",async()=>{

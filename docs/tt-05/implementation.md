@@ -1,0 +1,19 @@
+# TT-05 citation provenance and compatibility
+
+Implementation is incremental: Evidence.version is optional; old locator strings are unchanged. New EvidenceRef.provenance contains V2 case/evidence/version/segment identity and UTF-16 half-open text ranges, or whole-file image location. The host copies source text. No case/version is invented for unsaved uploads. Old references remain readable as legacy_unresolved. No destructive database migration.
+
+Server-owned EvidenceContext contains original evidence and Store snapshot segments. Chat with caseId replaces all client evidence/analysis with Store contents; unknown cases fail closed. Case reanalysis passes context through the existing provider chain. TT06 is responsible for version persistence and historical reads. Text identity checks do not establish semantic support or real-world truth; sourceSupport remains unchecked and factualVerification not_checked. Image references remain visual_unverified.
+
+Analysis source splitting preserves CRLF, blank-line offsets and repeated text locations. Model sourceId objects are strict: extra evidenceId/version/quote fields cause retry/rejection, never silent stripping. Analysis validation checks V2 version, case, locator, metadata and exact quote. Coverage records skipped images/materials and truncation. Runner retains all actual read ranges and reports unread evidence and incomplete coverage.
+
+Case answers lacking citations are rejected except narrowly recognized greetings/software usage questions and exact insufficiency responses. This is a deterministic citation-presence gate, not a semantic classifier: a valid E label does not prove each sentence is grounded. Legacy free-text answers are not upgraded to claim-level verified outputs; citationStatus explicitly describes source identity only. Semantic per-claim support and external corroboration require later structured-answer evaluation/human review. General conversation without case material remains available.
+
+The citation UI checks the current evidence version before opening it. When versions are missing/different, it shows saved excerpts and a version limitation rather than opening current evidence as historical proof. Exact historical file navigation awaits TT06/TT11.
+
+Tests cover CRLF/repeated text offsets, legacy unresolved adaptation, cross-case/wrong-version/range/quote rejection, unknown critical fields, images, multi-read coverage, server replacement of forged client evidence, unknown cases, no-citation answers and greetings. All model-related tests are simulated; no real model quality claim.
+
+Rollback: revert TT05 code; new fields are additive, but older applications may strip them when resaving. Keep a data backup and avoid writing new records with the old app during rollback. No automatic downgrade migration.
+
+Validation at delivery: 131/131 unit tests, TypeScript and ESLint pass (one pre-existing channel-import img warning). Webpack production build succeeds. Default Turbopack build cannot resolve Next through this worktree's external node_modules junction; repeat default build in integration with physical dependencies. Browser integration and real-model evaluation remain integration/release gates.
+
+TT08 runner integration: search_evidence now uses EvidenceIndex with explicit Chinese expansion and pagination. Trusted snapshot version grants are generated server-side; search results contain preview/offset only and do not enter read coverage until read_evidence runs. Demo mode explicitly reads returned candidates before quoting. Unsaved evidence uses an in-memory temporary namespace/version solely for indexing; these identifiers never enter provenance or persistent references. The temporary database closes after each search. This prioritizes bounded ownership and compatibility; persistent-index performance reuse is future optimization. case_overview rejects extra arguments.

@@ -1,3 +1,4 @@
+import type { EvidenceContext } from "../evidence/provenance";
 import { effectiveConnection } from "../investigator/connections";
 import { analyzeWithConnection } from "./shared-model";
 import type { Evidence } from "../contracts";
@@ -12,9 +13,9 @@ function localMeta(): AnalyzeOutcome["meta"] {
   return { truncated: 0, droppedEvidence: 0, droppedImages: 0, images: 0 };
 }
 
-export async function analyzeEvidence(evidence: Evidence[]): Promise<AnalyzeOutcome> {
+export async function analyzeEvidence(evidence: Evidence[], context?:EvidenceContext): Promise<AnalyzeOutcome> {
   const shared = effectiveConnection(undefined,"analysis");
-  if (shared) return analyzeWithConnection(evidence, shared);
+  if (shared) return analyzeWithConnection(evidence, shared, context);
   const provider = (process.env.AI_PROVIDER ?? "auto").toLowerCase();
 
   // auto：有密钥就走真实模型，没有就走本地规则——避免「配了 key 却忘了改 provider」

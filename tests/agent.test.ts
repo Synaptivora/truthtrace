@@ -1,3 +1,13 @@
+import { EventEmitter } from "node:events";
+vi.mock("node:dns/promises",()=>({lookup:vi.fn(async()=>[{address:"8.8.8.8",family:4}])}));
+vi.mock("node:https",()=>({request:(url:URL, options:Record<string,unknown>, callback:(response:EventEmitter)=>void)=>{
+ const req=new EventEmitter() as EventEmitter & {end:(body:string)=>void;destroy:()=>void};
+ req.destroy=()=>{};
+ req.end=(body:string)=>{Promise.resolve(fetch(url,{...options,body} as RequestInit)).then(async response=>{
+ const res=Object.assign(new EventEmitter(),{statusCode:response.status});callback(res);
+ res.emit("data",Buffer.from(await response.arrayBuffer()));res.emit("end");
+ }).catch(error=>req.emit("error",error));};return req;
+}}));
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runAgent, makeTools, agentTools } from "@/lib/agent/runner";
 import { AgentRequestSchema, type AgentRequest } from "@/lib/agent/contracts";
@@ -81,7 +91,9 @@ describe("provider protocols and credentials", () => {
   });
   it("does not expose configured server credentials", async () => {
     vi.stubEnv("AGENT_PROVIDER", "openai"); vi.stubEnv("AGENT_API_KEY", "never-display-me"); vi.stubEnv("AGENT_MODEL", "fixture");
-    expect(await (await GET()).text()).not.toContain("never-display-me");
+    vi.stubEnv("TRUTHTRACE_MACHINE_TOKEN","t".repeat(64));
+    const response=await GET(new Request("http://localhost:3000/api/agent/connection",{headers:{host:"localhost:3000",authorization:`Bearer ${"t".repeat(64)}`}}));
+    expect(response.status).toBe(200);expect(await response.text()).not.toContain("never-display-me");
   });
   it("converts Anthropic tool use and results", () => {
     const step = parseStep("anthropic", { content: [{ type: "tool_use", id: "a1", name: "read_evidence", input: { id: "E1" } }] });
@@ -116,12 +128,24 @@ describe("chat route", () => {
     expect(AgentRequestSchema.safeParse({ ...input, evidence: [input.evidence[0], input.evidence[0]] }).success).toBe(false);
   });
   it("returns framed status and result events", async () => {
-    const response = await POST(new Request("http://localhost/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, mode: "demo" }) }));
+    vi.stubEnv("TRUTHTRACE_MACHINE_TOKEN","t".repeat(64));
+    const response = await POST(new Request("http://localhost:3000/api/agent/chat", { method: "POST", headers: { host:"localhost:3000", authorization:`Bearer ${"t".repeat(64)}`, "Content-Type": "application/json" }, body: JSON.stringify({ ...input, mode: "demo" }) }));
     const events = (await response.text()).trim().split("\n").map(s => JSON.parse(s));
     expect(events[0].type).toBe("status"); expect(events.at(-1).type).toBe("result");
   });
   it("rejects cross-site requests", async () => {
-    const response = await POST(new Request("http://localhost/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://unrelated.example" }, body: JSON.stringify(input) }));
-    expect(response.status).toBe(400);
+    const response = await POST(new Request("http://localhost:3000/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://unrelated.example" }, body: JSON.stringify(input) }));
+    expect(response.status).toBe(403);
   });
+});
+
+describe("transport metadata",()=>{
+ it("reports observed tool support without inventing vision capability",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(reply({...toolReply(),usage:{prompt_tokens:10,completion_tokens:5}})));const result=await modelStep(connection,[],[],new AbortController().signal);expect(result.usage).toEqual({inputTokens:10,outputTokens:5});expect(result.capabilities).toEqual({text:"unknown",tools:"observed",vision:"unknown"});});
+ it("classifies retryable HTTP without leaking upstream bodies",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response("secret",{status:429})));await expect(modelStep(connection,[],[],new AbortController().signal)).rejects.toMatchObject({code:"MODEL_HTTP",retryable:true});});
+ it("maps malformed responses to a safe error",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response("secret")));await expect(modelStep(connection,[],[],new AbortController().signal)).rejects.toMatchObject({code:"MODEL_RESPONSE",retryable:false});});
+ it("freezes resolved credential destination",()=>{const resolved=resolveConnection(connection)!;expect(Object.isFrozen(resolved)).toBe(true);expect(()=>{resolved.baseUrl="https://attacker.example";}).toThrow();});
+});
+describe("case answer provenance policy",()=>{
+ it("rejects case answers without references",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(reply(textReply("已全部到账"))));await expect(runAgent(input,new AbortController().signal,()=>{})).rejects.toThrow("缺少已读取");});
+ it("permits greeting and explicit insufficiency without invented citations",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(reply(textReply("你好！"))));expect((await runAgent({...input,messages:[{role:"user",content:"你好"}]},new AbortController().signal,()=>{})).citationStatus).toBe("unverified_answer");vi.stubGlobal("fetch",vi.fn().mockResolvedValue(reply(textReply("现有材料不足，无法核实。"))));expect((await runAgent(input,new AbortController().signal,()=>{})).citations).toEqual([]);});
 });

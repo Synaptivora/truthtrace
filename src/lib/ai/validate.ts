@@ -1,3 +1,4 @@
+import { validateEvidenceRef, type EvidenceContext } from "../evidence/provenance";
 import {
   AnalysisPayloadSchema,
   AnalysisResultSchema,
@@ -10,6 +11,7 @@ export function validateAnalysis(
   input: unknown,
   evidence: Evidence[],
   analysisMode: AnalysisResult["analysisMode"],
+  context?:EvidenceContext,
 ): AnalysisResult {
   const payload: AnalysisPayload = AnalysisPayloadSchema.parse(input);
   // Text citations must match source text even when the model input was truncated.
@@ -32,6 +34,7 @@ export function validateAnalysis(
       throw new Error("分析结果 ID 重复");
     }
     for (const item of collection) {
+      if(analysisMode!=="mock")item.evidenceRefs=item.evidenceRefs.map(ref=>validateEvidenceRef(ref,evidence,context));
       for (const ref of item.evidenceRefs) {
         if (!evidenceIds.has(ref.evidenceId)) {
           throw new Error(`模型引用了不存在的证据：${ref.evidenceId}`);
@@ -73,5 +76,6 @@ export function validateAnalysis(
     ...payload,
     generatedAt: new Date().toISOString(),
     analysisMode,
+    sourceSupport:"unchecked",factualVerification:"not_checked",
   });
 }

@@ -1,3 +1,4 @@
+import { ingestionFetch } from "@/lib/ingestion/service";
 import { EvidenceSchema, type Evidence } from "../contracts";
 import { ingestionUrl } from "./service";
 
@@ -28,7 +29,7 @@ async function parseRemotely(file: File, serviceUrl: string): Promise<Evidence> 
   const body = new FormData();
   body.append("file", file);
 
-  const response = await fetch(`${serviceUrl.replace(/\/$/, "")}/parse`, {
+  const response = await ingestionFetch(`${serviceUrl.replace(/\/$/, "")}/parse`, {
     method: "POST",
     body,
     signal: AbortSignal.timeout(240_000),
@@ -113,7 +114,7 @@ async function chatBundles(file: File): Promise<ChatBundle[] | null> {
 }
 
 async function parseChatRemotely(bundle: ChatBundle, serviceUrl: string): Promise<Evidence[]> {
-  const response = await fetch(`${serviceUrl.replace(/\/$/, "")}/parse_chat`, {
+  const response = await ingestionFetch(`${serviceUrl.replace(/\/$/, "")}/parse_chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -133,6 +134,7 @@ async function parseChatRemotely(bundle: ChatBundle, serviceUrl: string): Promis
 
 /** 一个文件 → 一条或多条证据（聊天导出会按会话展开成 chat + 媒体）。 */
 export async function parseEvidenceFile(file: File): Promise<Evidence[]> {
+  if (file.size > 25*1024*1024) throw new Error("Request too large");
   if (file.size === 0) throw new Error(`${file.name} 是空文件`);
 
   const serviceUrl = process.env.INGESTION_SERVICE_URL || (/\.(pdf|json)$/i.test(file.name)?ingestionUrl():undefined);

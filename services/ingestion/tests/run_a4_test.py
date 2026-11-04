@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """A4/A6 媒体感知 就地实测（同进程起服务，避免后台进程被回收）。"""
 import sys, os, threading, time, json, base64, uuid
-import urllib.request, urllib.error
+import urllib.request
+import security_test_auth, urllib.error
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import server

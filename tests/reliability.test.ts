@@ -1,3 +1,13 @@
+import { EventEmitter } from "node:events";
+vi.mock("node:dns/promises",()=>({lookup:vi.fn(async()=>[{address:"8.8.8.8",family:4}])}));
+vi.mock("node:https",()=>({request:(url:URL, options:Record<string,unknown>, callback:(response:EventEmitter)=>void)=>{
+ const req=new EventEmitter() as EventEmitter & {end:(body:string)=>void;destroy:()=>void};
+ req.destroy=()=>{};
+ req.end=(body:string)=>{Promise.resolve(fetch(url,{...options,body} as RequestInit)).then(async response=>{
+ const res=Object.assign(new EventEmitter(),{statusCode:response.status});callback(res);
+ res.emit("data",Buffer.from(await response.arrayBuffer()));res.emit("end");
+ }).catch(error=>req.emit("error",error));};return req;
+}}));
 import { afterEach, expect, it, vi } from "vitest";
 import { analysisSources, resolveAnalysisSources, analyzeWithConnection } from "@/lib/ai/shared-model";
 import { createRuleAnalysis } from "@/lib/ai/rule";
@@ -10,7 +20,7 @@ it("links explicit mentions without inferring relations between all group member
   const a=createRuleAnalysis([evidence]);expect(a.relationships).toHaveLength(1);expect(a.relationships[0].label).toBe("明确提及（@）");expect(a.people.every(p=>p.role==="发言人")).toBe(true);
 });
 it("resolves source handles to exact host-owned quotes, rejecting unknown handles",()=>{
-  const sources=analysisSources([evidence]);const output=resolveAnalysisSources({people:[{evidenceRefs:[{sourceId:"R1",quote:"伪造"}]}]},sources);
+  const sources=analysisSources([evidence]);expect(()=>resolveAnalysisSources({people:[{evidenceRefs:[{sourceId:"R1",quote:"伪造"}]}]},sources)).toThrow();const output=resolveAnalysisSources({people:[{evidenceRefs:[{sourceId:"R1"}]}]},sources);
   expect((output.people as {evidenceRefs:{quote:string}[]}[])[0].evidenceRefs[0].quote).toBe(evidence.content.split("\n")[0]);
   expect(()=>resolveAnalysisSources({people:[{evidenceRefs:[{sourceId:"R99"}]}]},sources)).toThrow("未知原文编号");
 });
