@@ -46,6 +46,18 @@ def check(name, got, want):
 
 
 def post_json(obj):
+    # Upload bytes explicitly; HTTP callers may not authorize local filesystem roots.
+    import copy, mimetypes
+    obj = copy.deepcopy(obj)
+    obj.pop("media_dir", None)
+    for record in obj.get("records", obj.get("messages", [])):
+        ref = record.get("media", "")
+        if ref and not ref.startswith("data:"):
+            candidate = os.path.join(WS, ref)
+            if os.path.isfile(candidate):
+                with open(candidate,"rb") as media:
+                    record["media"] = "data:"+(mimetypes.guess_type(candidate)[0] or "application/octet-stream")+";base64,"+base64.b64encode(media.read()).decode()
+
     req = urllib.request.Request(BASE + "/parse_chat",
                                  data=json.dumps(obj, ensure_ascii=False).encode("utf-8"),
                                  method="POST")

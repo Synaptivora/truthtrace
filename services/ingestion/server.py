@@ -956,7 +956,7 @@ def _media_placeholder(name: str, ref: str, time: str,
 
 
 def build_media_evidence(item: dict, media_dir: str | None = None,
-                         origin: str | None = None) -> dict:
+                         origin: str | None = None, allow_files: bool = True) -> dict:
     """把一条媒体项转成独立 evidence。
 
     media_ref 支持：data URL / 纯 base64 / 路径(相对或绝对)。
@@ -985,15 +985,29 @@ def build_media_evidence(item: dict, media_dir: str | None = None,
         except Exception:
             return _media_placeholder(name, ref, time, origin)
     else:
-        path = ref
-        if media_dir and path and not os.path.isabs(path):
-            path = os.path.join(media_dir, path)
-        if path and os.path.isfile(path):
-            with open(path, "rb") as f:
-                raw = f.read()
-            mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        if not allow_files:
+            if os.path.isabs(ref) or ".." in ref.replace("\\", "/").split("/"):
+                raise ValueError("Uploaded chat cannot reference local files")
+            return _media_placeholder(name, ref, time, origin)
+        from pathlib import Path
+        root = Path(media_dir or UPLOAD_DIR).resolve()
+        path = Path(ref) if os.path.isabs(ref) else root / ref
+        canonical = path.resolve()
+        if not canonical.is_relative_to(root):
+            raise ValueError("Media outside managed directory")
+        # Refuse links even within the tree to avoid an ambiguous provenance chain.
+        if any(part.is_symlink() for part in [path, *path.parents] if part != root.parent):
+            raise ValueError("Linked media is not allowed")
+        if canonical.is_file():
+            if canonical.stat().st_size > REQUEST_LIMIT:
+                raise ValueError("Attachment resource limit")
+            with canonical.open("rb") as f:
+                raw = f.read(REQUEST_LIMIT + 1)
+            mime = mimetypes.guess_type(str(canonical))[0] or "application/octet-stream"
         else:
             return _media_placeholder(name, ref, time, origin)
+
+    mime = validate_media_resources(raw or b"", mime)
 
     # ⚠️ 与 /parse 共用同一道闸门，且同样**只治文档**：PDF / Office / 文本要抽正文，
     # 体积直接决定耗时；图片只做 base64、不解析，不受此限（与上传侧保持一致）。
@@ -1088,7 +1102,7 @@ def build_chat_from_text(filename: str, data: bytes) -> str:
 
 
 def build_chat_bundle(records, name: str | None = None, media_dir: str | None = None,
-                      source: str = "用户上传") -> list:
+                      source: str = "用户上传", allow_files: bool = True) -> list:
     """返回 [chat_evidence, *media_evidences]。用于 /parse_chat（A 侧扩展）。
 
     source 由调用方显式给（微信/钉钉/飞书）；不给就按「用户上传」标，
@@ -1104,7 +1118,7 @@ def build_chat_bundle(records, name: str | None = None, media_dir: str | None = 
     }]
     for item in media_list:
         # 媒体证据的 source 也继承平台（微信/钉钉/飞书），便于 B/C 溯源
-        evidences.append(build_media_evidence(item, media_dir, source))
+        evidences.append(build_media_evidence(item, media_dir, source, allow_files=allow_files))
     return evidences
 
 
@@ -1258,9 +1272,9 @@ def sniff_mime(data: bytes):
     return None
 
 
-def build_evidence(filename, mime, data: bytes, origin: str | None = None,
-                   max_chars: int | None = None, page_range: str | None = None,
-                   base_url: str | None = None) -> dict:
+def validate_media_resources(data, mime):
+    if (mime or "").lower() in ("", "application/octet-stream", "binary/octet-stream"):
+        mime = sniff_mime(data) or mime
     if len(data) > REQUEST_LIMIT:
         raise ValueError("Attachment resource limit")
     if data.startswith(b"PK"):
@@ -1286,6 +1300,13 @@ def build_evidence(filename, mime, data: bytes, origin: str | None = None,
                     raise ValueError("Image pixel limit")
         except UnidentifiedImageError:
             pass  # Existing normalization explicitly marks unsupported media as unreadable.
+    return mime
+
+
+def build_evidence(filename, mime, data: bytes, origin: str | None = None,
+                   max_chars: int | None = None, page_range: str | None = None,
+                   base_url: str | None = None) -> dict:
+    mime = validate_media_resources(data, mime)
     # MIME 不可靠时按魔数兜底（否则 PDF 会被当文本，二进制倒进 content）。
     # 放在闸门之前，是因为闸门要按类型决定适不适用——判断类型需要可靠的 MIME。
     if (mime or "").lower() in ("", "application/octet-stream", "binary/octet-stream"):
@@ -1400,20 +1421,29 @@ def isolated_build_evidence(filename, mime, data, **kwargs):
     return json.loads(result.stdout)
 
 
+def isolated_build_chat(records, name, source):
+    import subprocess
+    payload = json.dumps({"records": records, "name": name, "source": source})
+    code = "import server,json,sys; p=json.load(sys.stdin); result=server.build_chat_bundle(p['records'],p['name'],None,p['source'],allow_files=False); json.dump(result,sys.stdout,ensure_ascii=True)"
+    result = subprocess.run([sys.executable, "-X", "utf8", "-c", code], input=payload, capture_output=True, text=True, encoding="utf-8", cwd=os.path.dirname(os.path.abspath(__file__)), timeout=30)
+    if result.returncode:
+        raise ValueError("Chat parser rejected input")
+    return json.loads(result.stdout)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
     def _trusted(self, authenticate=True):
+        import time
+        self._deadline = time.monotonic() + 30
         self.connection.settimeout(30)
         host = self.headers.get("Host", "")
-        allowed_hosts = {"localhost", "127.0.0.1", "[::1]"}
-        hostname = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
-        if host.startswith("["):
-            hostname = host.split("]", 1)[0] + "]"
+        allowed_hosts = {f"{name}:{self.server.server_port}" for name in ("localhost", "127.0.0.1", "[::1]")}
         origin = self.headers.get("Origin")
         allowed_origins = {x.strip() for x in os.environ.get("TRUTHTRACE_INGESTION_ORIGINS", "").split(",") if x.strip() and x.strip() != "*"}
-        if hostname not in allowed_hosts or (origin is not None and (origin == "null" or origin not in allowed_origins)):
+        if len(self.headers.get_all("Host", [])) != 1 or host not in allowed_hosts or (origin is not None and (origin == "null" or origin not in allowed_origins)):
             self._send_json({"error": "请求来源不受信任"}, 403)
             return False
         token = os.environ.get("TRUTHTRACE_INGESTION_TOKEN", "")
@@ -1453,6 +1483,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if not REQUEST_SLOTS.acquire(blocking=False):
+            self._send_json({}, 429)
+            return
+        try:
+            self._get_authorized()
+        finally:
+            REQUEST_SLOTS.release()
+
+    def _get_authorized(self):
         if not self._trusted(urlparse(self.path).path.rstrip("/") != "/health"):
             return
         path = urlparse(self.path).path.rstrip("/")
@@ -1532,6 +1571,11 @@ class Handler(BaseHTTPRequestHandler):
                 chunk = f.read(65536)
                 if not chunk:
                     break
+                import time
+                remaining = self._deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Download deadline exceeded")
+                self.connection.settimeout(remaining)
                 self.wfile.write(chunk)
 
     def _read_body(self):
@@ -1552,10 +1596,16 @@ class Handler(BaseHTTPRequestHandler):
         if length <= 0:
             self._send_json({}, 400)
             return None
+        import time
+        deadline = getattr(self, "_deadline", time.monotonic() + 30)
         chunks = bytearray()
         try:
             while len(chunks) < length:
-                chunk = self.rfile.read(min(65536, length - len(chunks)))
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError()
+                self.connection.settimeout(remaining)
+                chunk = self.rfile.read1(min(65536, length - len(chunks)))
                 if not chunk:
                     self._send_json({}, 400)
                     return None
@@ -1602,7 +1652,8 @@ class Handler(BaseHTTPRequestHandler):
                 payload = json.loads(body.decode("utf-8"))
                 records = payload.get("records") or payload.get("messages") or []
                 name = payload.get("name")
-                media_dir = payload.get("media_dir")
+                if payload.get("media_dir") is not None:
+                    raise ValueError("External media directory not allowed")
                 # 默认「用户上传」而不是「微信」：调用方没说是哪个平台，就不该替它编一个。
                 # 三个适配器（微信/钉钉/飞书）都显式传 source，不受影响；
                 # 手敲/粘贴的聊天稿走默认值，标成「用户上传」才是诚实的溯源。
@@ -1610,7 +1661,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(records, list) or not records:
                     self._send_json({"error": "records 必须是非空数组"}, 400)
                     return
-                evidences = build_chat_bundle(records, name, media_dir, source)
+                evidences = isolated_build_chat(records, name, source)
                 self._send_json({"evidences": evidences})
             except json.JSONDecodeError:
                 self._send_json({"error": "请求体必须是 JSON"}, 400)
