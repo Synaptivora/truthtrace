@@ -68,6 +68,11 @@ export function AgentPanel({ context, onReady, onChannel }: { context: AgentCont
   function supplement(channel?:ChannelId,draft=goal){setGoal(draft);if(channel)onChannel(channel,draft||context?.goal||"");else setView("materials");}
   const threadId = context?.caseId || context?.evidence.map(e => e.id).join("|") || "global";
   useEffect(() => {
+    function configure() { if (document.fullscreenElement) void document.exitFullscreen(); setOpen(true); setView("model"); }
+    window.addEventListener("truthtrace:configure-model", configure);
+    return () => window.removeEventListener("truthtrace:configure-model", configure);
+  }, []);
+  useEffect(() => {
     const controller = new AbortController();
     fetch("/api/agent/connection", { signal: controller.signal }).then(r => r.json()).then(r => { setServerConfigured(Boolean(r.configured)); setServer(r.error || (r.configured ? `${r.provider} · ${r.model}` : "尚未配置模型，可先使用本地演示。")); }).catch(() => { if (!controller.signal.aborted) setServer("暂时无法读取模型配置，请稍后重试。"); });
     return () => { controller.abort(); testRequest.current?.abort(); };
@@ -97,6 +102,7 @@ export function AgentPanel({ context, onReady, onChannel }: { context: AgentCont
     catch { setProbe("保存失败，请检查本地服务。"); } finally { setTesting(false); }
   }
   return <>
+    <AppSettings />
     <button ref={launcher} className="agent-launcher" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-controls="agent-panel"><MessageCircle size={19} />和咪探长聊聊</button>
     {open && <aside id="agent-panel" className={`agent-panel agent-view-${view}`} ref={panel} tabIndex={-1} aria-label="Synapse · 咪探长" onKeyDown={e => { if (e.key === "Escape") close(); }}>
       <header className="agent-header"><div><strong>Synapse · 咪探长</strong><small>{context?.caseName || "全局助手 · 未选择案件"}</small></div><button onClick={close} aria-label="关闭助手"><X size={20} /></button></header>
@@ -106,7 +112,7 @@ export function AgentPanel({ context, onReady, onChannel }: { context: AgentCont
         <button type="button" aria-pressed={view === "materials"} onClick={()=>setView("materials")}>补充材料</button>
         <button type="button" aria-pressed={["settings","model","connection"].includes(view)} onClick={()=>setView("settings")}><Settings size={17}/>设置</button>
       </nav>
-      <section hidden={view!=="settings"} className="agent-settings"><h2>连接与显示设置</h2><p>按当前需要配置，目标和材料会保留。</p><button onClick={()=>{returnTo.current=context?.analysis?"investigation":"chat";setView("model");}}>模型设置</button><button onClick={()=>setView("connection")}><Cable size={16}/>连接渠道</button><AppSettings embedded/></section>
+      <section hidden={view!=="settings"} className="agent-settings"><h2>连接与显示设置</h2><p>按当前需要配置，目标和材料会保留。</p><button onClick={()=>{returnTo.current=context?.analysis?"investigation":"chat";setView("model");}}>模型设置</button><button onClick={()=>setView("connection")}><Cable size={16}/>连接渠道</button></section>
       {view === "materials"&&<section className="agent-settings"><h2>{context?"把新材料交给我":"先选与问题有关的材料"}</h2><p>{goal||context?.goal||"可以先输入目标，也可以直接添加材料。"}</p><p>导入后保留你的目标；已有调查会纳入新材料重新核查。</p><input ref={upload} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.json" onChange={e=>{void importFiles(Array.from(e.target.files||[]));e.target.value="";}}/><button disabled={materialBusy} onClick={()=>upload.current?.click()}>上传文件或截图</button><button disabled={materialBusy} onClick={()=>supplement("dingtalk")}>选择钉钉会话</button><button disabled={materialBusy} onClick={()=>supplement("wechat")}>选择微信会话</button>{materialBusy&&<p role="status">正在整理，原有材料和目标会保留…</p>}{materialError&&<p role="alert">{materialError}</p>}</section>}
       {view === "investigation"&&context?.analysis&&<InvestigatorPanel key={context.caseId} context={{...context,analysis:context.analysis}} initialGoal={goal||context.goal} routedMode={routeMode} onGoalChange={value=>{setGoal(value);setRouteMode(undefined);}} onConfigure={configure} onSupplement={supplement}/>}
       {view === "investigation"&&routeReason&&<small className="agent-route-note">{routeReason}</small>}

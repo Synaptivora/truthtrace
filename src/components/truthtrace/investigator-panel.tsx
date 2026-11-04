@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { skillNames, skillLabels, investigationModes, suggestMode, taskStages, type InvestigationMode, type Task } from "@/lib/investigator/contracts";
 import type { CaseAnalysis } from "./api-client";
@@ -30,7 +31,7 @@ export function InvestigatorPanel({context,initialGoal,routedMode,onGoalChange,o
   async function decide(id:string,unknown=false){if(!task)return;setBusy(true);setError("");try{await prepare();const d=await call(`/api/investigations/${task.id}/decisions`,{id,value:unknown?"unverified":"modified",reason:unknown?"目前无法确认，请保留不确定性。":reasons[id]||""});setTask(d.task);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   const finished=task&&["completed","waiting_user"].includes(task.state);
   return <section aria-label="本次调查" className="investigator-panel investigator-embedded">
-    <header><div><small>咪探长 · {context.evidence.length} 份本案材料</small><h2>{finished?"查到了什么，还缺什么":task?.state==="running"?"我正在核对你的问题":"先确认这次要查清的问题"}</h2></div></header>
+    <header><div><h2>{finished?"查到了什么，还缺什么":task?.state==="running"?"我正在核对你的问题":"先确认这次要查清的问题"}</h2></div><button onClick={()=>onConfigure(goal)}><Settings size={15} />模型设置</button></header>
     <details key={task?.id||"new"} open={!task}><summary>{task?"调整目标或开始新调查":"本次目标与范围"}</summary>
       <label>调查目标<textarea aria-label="调查目标" value={goal} onChange={e=>{setGoal(e.target.value);onGoalChange(e.target.value);}} maxLength={4000} placeholder="例如：退款承诺与实际到账是否一致？"/></label>
       <p className="investigator-route">{investigationModes[selectedMode].description} 只使用本案已选材料。</p>

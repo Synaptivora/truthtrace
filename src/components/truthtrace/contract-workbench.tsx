@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { Flag, FolderOpen, GitBranch, Clock3, FileText, Maximize, X, Sparkles, Plus, Download } from "lucide-react";
+import { Flag, FolderOpen, GitBranch, Clock3, FileText, Maximize, X, Sparkles, Plus, Download, Search } from "lucide-react";
 import { RelationshipGraph } from "../relationship-graph";
 import { Timeline } from "../timeline";
 import type { EvidenceRef } from "@/lib/contracts";
@@ -10,6 +10,8 @@ import { analyzeFiles } from "./api-client";
 import { analysisReport, materialKinds, uniqueRefs } from "./case-view";
 import type { CaseAnalysis } from "./api-client";
 import { EvidenceContent } from "./evidence-content";
+import { EvidenceThumbnail } from "./evidence-thumbnail";
+
 import avatar from "./assets/inspector-avatar.png";
 
 export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAnalysis; onHome: () => void; onUpdate: (value: CaseAnalysis) => void | Promise<void> }) {
@@ -25,6 +27,7 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
   const [selected, setSelected] = useState<string | null>(null);
   const [focused, setFocused] = useState<string[]>([]);
   const [immersive, setImmersive] = useState(false);
+  const nativeFullscreen = useRef(false);
   // 导入提示（跳过的会话 / 被裁剪的证据）弹层关掉后才看得到，所以放在工作台里，允许手动关闭
   const [noticeOpen, setNoticeOpen] = useState(true);
   const notice = result.notice;
@@ -41,16 +44,16 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
     const previous = document.body.style.overflow;
     if (immersive) document.body.style.overflow = "hidden";
     function escape(event: KeyboardEvent) { if (event.key === "Escape" && !dialog.current?.open) setImmersive(false); }
-    function nativeChanged() { if (immersive && !document.fullscreenElement) setImmersive(false); }
+    function nativeChanged() { if (nativeFullscreen.current && !document.fullscreenElement) { nativeFullscreen.current = false; setImmersive(false); } }
     document.addEventListener("keydown", escape);
     document.addEventListener("fullscreenchange", nativeChanged);
     return () => { document.body.style.overflow = previous; document.removeEventListener("keydown", escape); document.removeEventListener("fullscreenchange", nativeChanged); };
   }, [immersive]);
   async function toggleFullscreen() {
     setImmersive(value => !value);
-    if (document.fullscreenElement === shell.current) await document.exitFullscreen();
+    if (document.fullscreenElement === shell.current) { nativeFullscreen.current = false; await document.exitFullscreen(); }
     else if (!immersive && document.fullscreenEnabled) {
-      try { await shell.current?.requestFullscreen(); } catch { /* Viewport presentation remains available. */ }
+      try { await shell.current?.requestFullscreen(); nativeFullscreen.current = document.fullscreenElement === shell.current; } catch { nativeFullscreen.current = false; }
     }
   }
   function focusSources(refs: EvidenceRef[]) { setView("graph"); setFocused([...new Set(refs.map(ref => ref.evidenceId))]); }
@@ -76,13 +79,13 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
 
   return <div ref={shell} className={`contract-shell ${immersive ? "contract-immersive" : ""}`}>
     <header className="contract-topbar">
-      <button className="contract-brand" onClick={onHome} aria-label="返回案件首页"><Image src={avatar} alt="咪探长" width={57} height={60} /><span>TruthTrace<small>证据调查工作台</small></span></button>
-      <div><small>当前案件</small><h1>{result.caseName || analysis.caseTitle}</h1></div>
+      <button className="contract-brand" onClick={onHome} aria-label="返回案件首页" title="点击咪探长，返回案件首页"><Image src={avatar} alt="咪探长" width={57} height={60} /><span>返回首页</span></button>
+      <div className="contract-case-heading"><h1>{result.caseName || analysis.caseTitle}</h1></div>
       <span className={`contract-mode mode-${analysis.analysisMode}`}>{{ mock: "模拟分析", rule: "规则分析", model: "模型分析" }[analysis.analysisMode]}</span>
+      <button className="contract-outline investigator-entry" onClick={()=>window.dispatchEvent(new CustomEvent("truthtrace:assistant",{detail:{view:"investigation"}}))}><Search size={18} />自主调查</button>
       <input ref={upload} type="file" accept="image/*,.pdf,.txt,.md" multiple hidden onChange={event => { void supplement(Array.from(event.target.files || [])); event.target.value = ""; }} /><button className="contract-outline" disabled={busy} onClick={() => upload.current?.click()}><Plus size={14} />{busy ? "正在整理…" : "补充材料"}</button><button className="contract-outline" onClick={exportReport}><Download size={14} />导出报告</button>
-      <button className="contract-outline" onClick={onHome}><FolderOpen size={14} /> 案件首页</button>
     </header>
-    <div className="contract-import-notice" role="status"><strong>{analysis.analysisMode==="model"?"当前为模型分析，点击连线可查互动依据。":"当前只有材料统计，尚未完成模型分析。"}</strong><button className="contract-outline" disabled={analyzing||busy} onClick={()=>void reanalyze()}>{analyzing?"正在核对原文并整理关系…":analysis.analysisMode==="model"?"重新分析材料":"用模型分析已有材料"}</button>{analysis.analysisMode!=="model"&&<span>无需重新导入；模型连接保存在助手设置中。</span>}</div>
+    <div className="contract-import-notice" role="status"><strong>{analysis.analysisMode==="model"?"当前为模型分析，点击连线可查互动依据。":"当前只有材料统计，尚未完成模型分析。"}</strong><button className="contract-outline" disabled={analyzing||busy} onClick={()=>void reanalyze()}>{analyzing?"正在核对原文并整理关系…":analysis.analysisMode==="model"?"重新分析材料":"用模型分析已有材料"}</button>{analysis.analysisMode!=="model"&&<span>无需重新导入；可在底部应用设置中连接模型。</span>}</div>
     {busy && <p className="contract-feedback" role="status">正在整理补充材料，现有结果保留。</p>}{error && <p className="contract-feedback" role="alert">{error}</p>}
     {hasNotice && noticeOpen && notice && (
       <div className="contract-import-notice" role="status">
@@ -102,12 +105,12 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
       <section className="contract-investigation">
         <header><h2>调查工作台</h2><nav aria-label="调查视图">{([["graph", "关系图", GitBranch], ["timeline", "时间线", Clock3], ["evidence", "证据档案", FolderOpen], ["actions", "补证建议", FileText]] as const).map(([key, label, Icon]) => <button key={key} aria-pressed={view === key} onClick={() => setView(key)}><Icon size={14} />{label}</button>)}</nav><button onClick={() => void toggleFullscreen()} className="contract-expand" aria-label={immersive ? "退出沉浸展示" : "沉浸展示"}><Maximize size={16} /></button></header>
         {focused.length > 0 && <div className="contract-focus-bar" role="status"><span>已定位 {focused.length} 份关联证据</span><button onClick={() => setFocused([])}>显示全部 ×</button></div>}
-        <div className="contract-content">{view === "graph" ? <RelationshipGraph analysis={analysis} evidence={evidence} focusedEvidenceIds={focused} onOpenEvidence={openSource} /> : view === "timeline" ? <Timeline analysis={analysis} evidence={evidence} onOpenEvidence={openSource} /> : view === "evidence" ? <div className="contract-evidence-grid">{evidence.map(item => <button key={item.id} className="contract-material-card" onClick={() => openSource(item.id)}><FileText size={25}/><strong>{item.name}</strong><span>{materialKinds[item.kind]} · 查看原文 ↗</span></button>)}</div> : <div className="contract-records">
+        <div className="contract-content">{view === "graph" ? <RelationshipGraph analysis={analysis} evidence={evidence} focusedEvidenceIds={focused} onOpenEvidence={openSource} /> : view === "timeline" ? <Timeline analysis={analysis} evidence={evidence} onOpenEvidence={openSource} /> : view === "evidence" ? <div className="contract-evidence-grid">{evidence.map(item => <button key={item.id} className="contract-material-card" onClick={() => openSource(item.id)}><EvidenceThumbnail item={item} /><strong>{item.name}</strong><span>{materialKinds[item.kind]} · 查看原文 ↗</span></button>)}</div> : <div className="contract-records">
           <h3>承诺追踪</h3>{analysis.commitments.map(item => <article key={item.id}><strong>{item.commitment}</strong><p>{item.dueLabel} · {{ fulfilled: "已履行", pending: "待履行", disputed: "履行存疑", unknown: "尚未明确" }[item.status]}</p><div>{sourceChips(item.evidenceRefs)}</div></article>)}{analysis.commitments.length === 0 && <p>当前结果未提取到明确承诺。</p>}
           <h3>下一步补证</h3>{(analysis.analysisMode === "model" ? analysis.evidenceGaps : []).map(item => <article key={item.id}><strong>{item.title}</strong><p>{item.reason}</p><p>{item.suggestedEvidence}</p><div>{sourceChips(item.evidenceRefs)}</div></article>)}{(analysis.evidenceGaps.length === 0 || analysis.analysisMode === "mock") && <p>{analysis.analysisMode === "mock" ? "模拟分析未生成补证建议。" : "当前结果没有补证建议。"}</p>}
         </div>}</div>
       </section>
-      <aside className="contract-findings"><h2><Flag size={18} />重点发现</h2><p className="contract-summary">{analysis.analysisMode === "mock" ? "仅完成材料登记，尚未连接分析模型。" : analysis.analysisMode === "rule" ? "已按发言人统计出人物与时间线，语义结论需接模型。" : analysis.summary}</p>{analysis.contradictions.map((item, index) => <article key={item.id} className="contract-finding"><button className="contract-finding-title" onClick={() => focusSources(item.evidenceRefs)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong></button><p>{item.description}</p><small>待核实</small><button className="contract-compare" onClick={() => { setSelected(null); setComparison(item.id); }}>对照原文 →</button><div className="contract-sources">{sourceChips(item.evidenceRefs)}</div></article>)}{analysis.contradictions.length === 0 && analysis.analysisMode !== "mock" && <div className="contract-empty"><Sparkles size={23} /><p>当前结果未标出证据差异。</p></div>}<p className="contract-boundary">每项发现都保留来源，需结合原文人工核查。</p></aside>
+      <aside className="contract-findings"><h2><Flag size={18} />重点发现</h2><p className="contract-summary">{analysis.analysisMode === "mock" ? "仅完成材料登记，尚未连接分析模型。" : analysis.analysisMode === "rule" ? "已完成材料整理；人物关系与疑点需连接分析模型。" : analysis.summary}</p>{analysis.contradictions.map((item, index) => <article key={item.id} className="contract-finding"><button className="contract-finding-title" onClick={() => focusSources(item.evidenceRefs)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong></button><p>{item.description}</p><small>待核实</small><button className="contract-compare" onClick={() => { setSelected(null); setComparison(item.id); }}>对照原文 →</button><div className="contract-sources">{sourceChips(item.evidenceRefs)}</div></article>)}{analysis.contradictions.length === 0 && analysis.analysisMode !== "mock" && <div className="contract-empty"><Sparkles size={23} /><p>当前结果未标出证据差异。</p></div>}</aside>
     </div>
     <dialog ref={dialog} className="contract-source-dialog" onClose={() => { setSelected(null); setComparison(null); }} onClick={event => { if (event.target === event.currentTarget) { setSelected(null); setComparison(null); } }}><header><span><small>原始材料 · {original?.source || materialKinds[original?.kind || ""] || "证据对照"}</small><h2>{original?.name || finding?.title}</h2></span><button onClick={() => { setSelected(null); setComparison(null); }} aria-label="关闭原文"><X size={21} /></button></header>{finding ? <div className="contract-comparison">{uniqueRefs(finding.evidenceRefs).map((ref, index) => <article key={index}><h3>{evidence.find(e => e.id === ref.evidenceId)?.name || ref.evidenceId}</h3><blockquote>{ref.quote}</blockquote><small>{ref.locator}</small><button onClick={() => openSource(ref.evidenceId)}>查看完整材料 ↗</button></article>)}</div> : original?.kind === "image" ? <Image src={original.content} alt={original.name} width={1000} height={800} unoptimized /> : original ? <EvidenceContent item={original} all={evidence} onOpen={openSource} /> : null}{original && <details className="source-note"><summary>核查备注</summary><label><span className="agent-sr">核查备注</span><textarea value={notes[original.id] || ""} onChange={event => { const next = { ...notes, [original.id]: event.target.value }; setNotes(next); void Promise.resolve(onUpdate({ ...result, reviewNotes: next })).catch(e=>setError(e.message)); }} placeholder="识别有误或尚待核实的内容…" maxLength={8000} /><small>保留本页，随报告导出；原始材料不变。</small></label></details>}</dialog>
   </div>;

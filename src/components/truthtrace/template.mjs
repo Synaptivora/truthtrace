@@ -25,26 +25,26 @@ return String.raw`
   <main id="caseEntry" aria-label="案件工作空间"></main>
   <div class="app-layout">
     <aside class="sidebar" aria-label="工作空间导航">
-      <a class="brand" href="#home" data-entry="home" aria-label="TruthTrace 首页"><span class="brand-seal"><img src="./assets/inspector-avatar.png" alt="咪探长举着放大镜探头"/></span><span><strong>TruthTrace</strong><small>证据调查工作台</small></span></a>
-      <div class="workspace-label">我的工作空间</div>
+      <a class="brand" href="#home" data-entry="home" aria-label="返回案件首页" title="点击咪探长，返回案件首页"><span class="brand-seal"><img src="./assets/inspector-avatar.png" alt="咪探长举着放大镜探头"/><small class="brand-home-label">返回首页</small></span><span><strong>TruthTrace</strong></span></a>
+
       <button class="sidebar-new-case" type="button" data-entry="new">＋ 新建案件</button>
       <button class="case-selector" type="button" data-preview><span class="case-icon"><svg><use href="#i-layers"/></svg></span><span><strong>校园兼职押金纠纷</strong><small>CASE 2026-001</small></span><i></i></button>
       <nav class="navigation" aria-label="案件模块">
-        <button class="nav-item active" data-view="graph" type="button" aria-current="page"><svg><use href="#i-network"/></svg><span>调查工作台</span></button>
-        <button class="nav-item" data-view="center" type="button"><svg><use href="#i-folder"/></svg><span>材料核查</span></button>
-        <button class="nav-item" data-view="people" type="button"><svg><use href="#i-users"/></svg><span>人物与组织</span></button>
-        <button class="nav-item" data-view="tasks" type="button"><svg><use href="#i-flag"/></svg><span>补证建议</span></button>
+        <button class="nav-item active" data-view="graph" type="button" aria-label="调查工作台" title="调查工作台" aria-current="page"><svg><use href="#i-network"/></svg><span>调查工作台</span></button>
+        <button class="nav-item" data-view="center" type="button" aria-label="材料核查" title="材料核查"><svg><use href="#i-folder"/></svg><span>材料核查</span></button>
+        <button class="nav-item" data-view="people" type="button" aria-label="人物与组织" title="人物与组织"><svg><use href="#i-users"/></svg><span>人物与组织</span></button>
+        <button class="nav-item" data-view="tasks" type="button" aria-label="补证建议" title="补证建议"><svg><use href="#i-flag"/></svg><span>补证建议</span></button>
       </nav>
       <section class="recent-evidence"><div class="sidebar-heading">最近证据 <span>04</span></div><button class="recent-file" type="button" data-preview><span class="file-icon"><svg><use href="#i-file"/></svg></span><span><strong>兼职招聘公告</strong><small>E-01 · 10月27日</small></span></button><button class="recent-file" type="button" data-preview><span class="file-icon"><svg><use href="#i-file"/></svg></span><span><strong>退款承诺聊天记录</strong><small>E-02 · 10月30日</small></span></button><button class="recent-file" type="button" data-preview><span class="file-icon"><svg><use href="#i-file"/></svg></span><span><strong>转账记录截图</strong><small>E-03 · 10月31日</small></span></button><button class="recent-file" type="button" data-preview><span class="file-icon"><svg><use href="#i-file"/></svg></span><span><strong>报名群聊天记录</strong><small>E-04 · 10月28日</small></span></button></section>
-      <div class="sidebar-footer"><span class="secure-dot"></span> 私密案件档案 <span>模拟数据</span></div>
+
       <div class="shelf-books" aria-hidden="true"><i></i><i></i><i></i></div>
     </aside>
 
     <div class="workspace">
-      <header class="topbar"><div class="breadcrumb"><span>工作空间</span><svg><use href="#i-chevron"/></svg><span>调查案件</span><svg><use href="#i-chevron"/></svg><strong>校园兼职押金纠纷</strong><span class="breadcrumb-id">CASE 2026-001</span></div><div class="topbar-actions"><span class="sync-status"><i></i> 案件分析已更新</span><button class="round-button" type="button" aria-label="使用帮助" data-preview>?</button><button class="notification" hidden></button><span class="user-avatar">C</span></div></header>
+      <header class="topbar"><div class="breadcrumb"><a href="#home" data-entry="home">← 案件首页</a></div><div class="topbar-actions"><button class="round-button" type="button" aria-label="使用帮助" data-preview>?</button><button class="notification" hidden></button></div></header>
 
       <main class="main-content">
-        <section class="case-hero"><div class="hero-copy"><div class="hero-title"><h1>校园兼职押金纠纷</h1><span class="case-badge">调查中</span></div><p class="hero-description">张同学申请退还 500 元押金，退款时间与招募主体仍待核实。</p></div><div class="hero-decoration" aria-hidden="true"><div class="hero-photo"><img src="./assets/campus.jpg" alt=""/><span>OCT. 2026 · CAMPUS</span></div><img class="desk-lamp" src="./assets/desk-lamp.png" alt=""/><div class="lamp-light"></div></div><div class="hero-actions"><button class="button button-paper" type="button" data-preview><svg><use href="#i-spark"/></svg> 补充回单</button><button class="button button-amber" type="button" data-preview><svg><use href="#i-plus"/></svg> 上传证据</button></div></section>
+        <section class="case-hero"><div class="hero-copy"><div class="hero-title"><h1>校园兼职押金纠纷</h1><span class="case-badge">调查中</span></div><p class="hero-description">张同学申请退还 500 元押金，退款时间与招募主体仍待核实。</p></div><div class="hero-decoration" aria-hidden="true"><div class="hero-photo"><img src="./assets/campus.jpg" alt=""/></div><img class="desk-lamp" src="./assets/desk-lamp.png" alt=""/><div class="lamp-light"></div></div><div class="hero-actions"><button class="button button-paper" type="button" data-preview><svg><use href="#i-spark"/></svg> 补充回单</button><button class="button button-amber" type="button" data-preview><svg><use href="#i-plus"/></svg> 上传证据</button></div></section>
 
 
         <div class="investigation-layout">
@@ -57,21 +57,21 @@ return String.raw`
                 <svg class="evidence-threads" viewBox="0 0 1100 600" aria-hidden="true"><defs><filter id="thread-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="1" dy="2" stdDeviation="1.3" flood-color="#2a1009" flood-opacity=".65"/></filter></defs><g class="red-threads" filter="url(#thread-shadow)"><path d="M165 110 552 310"/><path d="M552 110 552 310"/><path d="M915 110 552 310"/><path d="M143 295 552 310"/><path d="M957 285 552 310"/><path d="M161 480 552 310"/><path d="M480 530 552 310"/></g><g class="uncertain-threads"><path d="M552 310Q670 565 851 545"/><path d="M552 310 958 440"/></g></svg>
                 <span class="thread-label label-recruit">招募关系</span><span class="thread-label label-refund">承诺退款 ↗</span><span class="thread-label label-deposit">缴纳押金<br/>¥ 500</span><span class="thread-label label-money">款项往来</span><span class="thread-label label-unsure">身份关联？<small>待核实</small></span>
 
-                <article class="evidence-node landscape-node node-location" tabindex="0" data-preview><span class="pin"></span><div class="photo-thumb campus-thumb"><img src="./assets/campus.jpg" alt="虚构校园招募地点"/></div><div class="node-copy"><span class="node-category">LOCATION / 地点</span><h3>校园招募点</h3><p>招募现场 · 地点线索</p></div></article>
+                <article class="evidence-node landscape-node node-location" tabindex="0" data-preview><span class="pin"></span><div class="photo-thumb campus-thumb"><img src="./assets/campus.jpg" alt="虚构校园招募地点"/></div><div class="node-copy"><span class="node-category">地点</span><h3>校园招募点</h3><p>招募现场 · 地点线索</p></div></article>
 
                 <article class="evidence-node landscape-node node-poster" tabindex="0" data-preview><span class="pin"></span><div class="mini-poster" aria-hidden="true"><div>校园兼职</div><strong>招募中</strong><small>STUDENT RECRUITMENT</small><span>500</span></div><div class="node-copy"><span class="node-category">E-01 / 原始材料</span><h3>兼职招聘公告</h3><p>10月27日 · 招募信息</p></div><span class="paper-tab">原始证据</span></article>
 
                 <article class="evidence-node landscape-node node-chat" tabindex="0" data-preview><span class="pin"></span><div class="chat-thumb" aria-hidden="true"><small>李老师</small><div>周五已经退款<br/>请注意查收。</div><span>10/30 21:47</span></div><div class="node-copy"><span class="node-category">E-02 / 聊天截图</span><h3>退款承诺记录</h3><p>10月30日 · 承诺退款</p></div></article>
 
-                <article class="evidence-node landscape-node node-student" tabindex="0" data-preview><span class="pin"></span><div class="photo-thumb student-thumb"><img src="./assets/students.jpg" alt="虚构学生身份示意"/></div><div class="node-copy"><span class="node-category">PERSON / 当事人</span><h3>张同学</h3><p>兼职学生 · 申请退款</p></div></article>
+                <article class="evidence-node landscape-node node-student" tabindex="0" data-preview><span class="pin"></span><div class="photo-thumb student-thumb"><img src="./assets/students.jpg" alt="虚构学生身份示意"/></div><div class="node-copy"><span class="node-category">当事人</span><h3>张同学</h3><p>兼职学生 · 申请退款</p></div></article>
 
-                <article class="evidence-node central-node" tabindex="0" data-preview><span class="pin"></span><div class="central-photo"><img src="./assets/campus.jpg" alt="案件相关组织地点示意"/><span>SUBJECT / 01</span></div><div class="central-title"><svg><use href="#i-building"/></svg><div><h3>星跃工作室</h3><p>招募方 / 组织方 <span>待核实</span></p></div></div><span class="central-underline"></span></article>
+                <article class="evidence-node central-node" tabindex="0" data-preview><span class="pin"></span><div class="central-photo"><img src="./assets/campus.jpg" alt="案件相关组织地点示意"/></div><div class="central-title"><svg><use href="#i-building"/></svg><div><h3>星跃工作室</h3><p>招募方 / 组织方 <span>待核实</span></p></div></div><span class="central-underline"></span></article>
 
-                <article class="evidence-node landscape-node node-contact" tabindex="0" data-preview><span class="pin"></span><div class="identity-portrait portrait-li"><img src="./assets/contacts.jpg" alt="虚构招募联系人示意"/></div><div class="node-copy"><span class="node-category">PERSON / 联系人</span><h3>李某</h3><p>招募负责人 <span>自称</span></p></div></article>
+                <article class="evidence-node landscape-node node-contact" tabindex="0" data-preview><span class="pin"></span><div class="identity-portrait portrait-li"><img src="./assets/contacts.jpg" alt="虚构招募联系人示意"/></div><div class="node-copy"><span class="node-category">联系人</span><h3>李某</h3><p>招募负责人 <span>自称</span></p></div></article>
 
-                <article class="evidence-node landscape-node node-peers" tabindex="0" data-preview><span class="pin"></span><div class="photo-thumb peers-thumb"><img src="./assets/students.jpg" alt="虚构其他报名者示意"/></div><div class="node-copy"><span class="node-category">PERSON / 线索提供者</span><h3>陈同学</h3><p>共同报名 · 证言待补充</p></div></article>
+                <article class="evidence-node landscape-node node-peers" tabindex="0" data-preview><span class="pin"></span><div class="photo-thumb peers-thumb"><img src="./assets/students.jpg" alt="虚构其他报名者示意"/></div><div class="node-copy"><span class="node-category">线索提供者</span><h3>陈同学</h3><p>共同报名 · 证言待补充</p></div></article>
 
-                <article class="evidence-node landscape-node node-wang" tabindex="0" data-preview><span class="pin"></span><div class="identity-portrait portrait-wang"><img src="./assets/contacts.jpg" alt="虚构退费联系人示意"/></div><div class="node-copy"><span class="node-category">PERSON / 关联人</span><h3>王某</h3><p>退费联系人 · 身份待核实</p></div></article>
+                <article class="evidence-node landscape-node node-wang" tabindex="0" data-preview><span class="pin"></span><div class="identity-portrait portrait-wang"><img src="./assets/contacts.jpg" alt="虚构退费联系人示意"/></div><div class="node-copy"><span class="node-category">关联人</span><h3>王某</h3><p>退费联系人 · 身份待核实</p></div></article>
 
                 <article class="evidence-node landscape-node node-receipt" tabindex="0" data-preview><span class="pin"></span><div class="receipt-thumb" aria-hidden="true"><span>退款到账</span><strong>+ ¥500.00</strong><small>交易完成</small><i>10/31 17:35</i></div><div class="node-copy"><span class="node-category">E-03 / 资金凭证</span><h3>转账记录截图</h3><p>10月31日 · 到账记录</p></div></article>
 
@@ -92,7 +92,7 @@ return String.raw`
             <div class="case-index"><span>ARCHIVE NO. 2026—001</span><span>模拟案件 · 设计预览</span></div>
           </aside>
         </div>
-        <footer class="page-footer"><span>TRUTHTRACE <i>—</i> EVERY DETAIL MATTERS.</span><span>把每一条线索，放回它的来处。</span></footer>
+
       </main>
     </div>
   </div>
