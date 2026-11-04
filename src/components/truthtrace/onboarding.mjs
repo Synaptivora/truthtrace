@@ -1,3 +1,6 @@
+import { createRoot } from 'react-dom/client';
+import { createElement } from 'react';
+import { CaseSearch } from './case-search/panel';
 import { EVIDENCE } from './case-data.mjs';
 
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -28,6 +31,7 @@ export function createSampleFiles() {
 export function initEntryFlow({root,signal,asset,onAnalyzeFiles,onAnalysisReady,onDemoReady,onContext,cases=[],onOpenCase,onOpenChannel}) {
   const host=root.querySelector('#caseEntry');
   let title='',items=[],mode='personal',screen='home',selected=0,run=0,feedback='',apiResult=null,pendingRequest=null;
+  let searchRoot;
   let lastCase;
   try{lastCase=JSON.parse(localStorage.getItem(sessionKey))}catch{/* An empty workspace is still available without storage. */}
   if(!lastCase||typeof lastCase.title!=='string'||lastCase.mode!=='sample')lastCase=null;
@@ -36,6 +40,7 @@ export function initEntryFlow({root,signal,asset,onAnalyzeFiles,onAnalysisReady,
   function pet(element){clearTimeout(petTimers.get(element));element.classList.remove('mascot-petting');void element.offsetWidth;element.classList.add('mascot-petting');petTimers.set(element,setTimeout(()=>{element.classList.remove('mascot-petting');petTimers.delete(element)},750))}
   const brand=`<a class="entry-brand" href="#home" data-entry="home" aria-label="返回案件首页" title="点击咪探长，返回案件首页"><img src="${asset('inspector-avatar.png')}" alt="咪探长"/><span><strong>TruthTrace</strong></span></a>`;
   function shell(content,step){
+    searchRoot?.unmount();searchRoot=null;
     host.innerHTML=`<div class="entry-shell"><header class="entry-header">${brand}</header>${step?`<nav class="entry-steps" aria-label="创建案件进度">${['导入材料','整理材料','调查结果'].map((label,i)=>`<span class="${step===i+1?'active':step>i+1?'done':''}" ${step===i+1?'aria-current="step"':''}><b>${step>i+1?'✓':`0${i+1}`}</b>${label}</span>`).join('')}</nav>`:''}${content}</div>`;
   }
   function enter(next,hash){
@@ -49,6 +54,7 @@ export function initEntryFlow({root,signal,asset,onAnalyzeFiles,onAnalysisReady,
     onContext?.(null);
     run++;pendingRequest?.abort();pendingRequest=null;enter('home');
     shell(`<section class="entry-home"><div class="entry-home-heading"><div><h1>先说说，你想查清什么？</h1><p>从一个问题开始，再选择相关材料。</p></div></div><form id="entryGoalForm" class="entry-goal"><label for="entryGoal">这次想解决的问题</label><textarea id="entryGoal" maxlength="4000" required placeholder="例如：我想核对聊天里的退款承诺和实际到账是否一致"></textarea><button class="entry-primary" type="submit">交给咪探长</button></form>${cases.map(item=>`<button class="entry-resume" type="button" data-entry-case="${esc(item.caseId)}">${icon('folder')}<span><strong>${esc(item.caseName||item.analysis.caseTitle)}</strong><span>${item.evidence.length} 份材料 · ${({mock:'模拟分析',rule:'规则分析',model:'模型分析'}[item.analysis.analysisMode])}</span></span><b>打开 →</b></button>`).join('')}${lastCase?`<button class="entry-resume" type="button" data-entry="resume">${icon('folder')}<span><small>${lastCase.mode==='sample'?'示例案件':'本地案件'}</small><strong>${esc(lastCase.title)}</strong><span>预设示例 · 继续查看</span></span><b>继续 →</b></button>`:''}<section class="empty-case-surface"><span class="empty-room-label">${lastCase?'A NEW CHAPTER':'NO CASE OPEN · 001'}</span><div class="empty-folder" aria-hidden="true"><span class="folder-sheet sheet-back"></span><span class="folder-sheet sheet-front"><i></i><i></i><i></i></span><span class="folder-cover">${icon('folder')}</span></div><h2>${lastCase?'新建一份案件':'也可以先整理材料'}</h2><p>已有聊天记录或截图？可以直接导入，案件会自动保存。</p><div class="entry-create-actions"><button class="entry-primary" type="button" data-entry="new">${icon('plus')} 手动创建</button><button class="entry-channel" type="button" data-entry="import-dingtalk">${channelIcon('dingtalk')} 从钉钉导入</button><button class="entry-channel" type="button" data-entry="import-wechat">${channelIcon('wechat')} 从微信导入</button></div><button class="entry-text-button" type="button" data-entry="sample">用示例材料体验完整流程 <span>↗</span></button><button class="empty-room-cat" type="button" aria-label="摸摸首页咪探长"><span>材料准备好了吗？</span><img src="${asset('detective-cat.png')}" alt="Synapse · 咪探长"/></button></section></section>`);
+    const searchHost=document.createElement('div');host.querySelector('.entry-home').prepend(searchHost);searchRoot=createRoot(searchHost);searchRoot.render(createElement(CaseSearch,{onOpenCase:id=>{hide();onOpenCase(id);}}));
     host.querySelector('#entryGoalForm')?.addEventListener('submit',event=>{event.preventDefault();const goal=host.querySelector('#entryGoal').value.trim();if(goal)window.dispatchEvent(new CustomEvent('truthtrace:assistant',{detail:{goal}}));});
   }
   function startNew(){onContext?.(null);run++;apiResult=null;release();mode='personal';title='';feedback='';selected=0;showImport()}
@@ -158,5 +164,5 @@ export function initEntryFlow({root,signal,asset,onAnalyzeFiles,onAnalysisReady,
         break;
     }
   },{signal});
-  return {showHome,startNew,hide,dispose(){run++;pendingRequest?.abort();petTimers.forEach(timer=>clearTimeout(timer));petTimers.clear();release()}};
+  return {showHome,startNew,hide,dispose(){searchRoot?.unmount();searchRoot=null;run++;pendingRequest?.abort();petTimers.forEach(timer=>clearTimeout(timer));petTimers.clear();release()}};
 }
