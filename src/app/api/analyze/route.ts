@@ -1,3 +1,4 @@
+import { secureRoute } from "@/lib/security/boundary";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { analyzeEvidence } from "@/lib/ai/provider";
@@ -22,7 +23,7 @@ const RequestSchema = z.object({
     "证据 ID 不可重复",
   ),
 });
-export async function POST(request: Request) {
+async function rawPOST(request: Request) {
   let body: unknown;
   try { body = await request.json(); }
   catch { return NextResponse.json({ error: "请求必须为有效 JSON" }, { status: 400 }); }
@@ -41,3 +42,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: detail }, { status: 502 });
   }
 }
+
+export const POST = secureRoute(rawPOST);

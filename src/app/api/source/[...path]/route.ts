@@ -1,3 +1,5 @@
+import { ingestionFetch } from "@/lib/ingestion/service";
+import { secureRoute } from "@/lib/security/boundary";
 import { NextResponse } from "next/server";
 import { ingestionUrl } from "@/lib/ingestion/service";
 
@@ -21,13 +23,13 @@ function unavailable() {
   );
 }
 
-export async function GET(request: Request, context: { params: Promise<{ path: string[] }> }) {
+async function rawGET(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const base = baseUrl();
   if (!base) return unavailable();
   const { path } = await context.params;
   const search = new URL(request.url).search;
   try {
-    const response = await fetch(`${base}/source/${path.join("/")}${search}`, {
+    const response = await ingestionFetch(`${base}/source/${path.join("/")}${search}`, {
       signal: AbortSignal.timeout(30_000),
     });
     const data = await response.json().catch(() => ({}));
@@ -40,7 +42,7 @@ export async function GET(request: Request, context: { params: Promise<{ path: s
   }
 }
 
-export async function POST(request: Request, context: { params: Promise<{ path: string[] }> }) {
+async function rawPOST(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const base = baseUrl();
   if (!base) return unavailable();
   const { path } = await context.params;
@@ -48,7 +50,7 @@ export async function POST(request: Request, context: { params: Promise<{ path: 
   // （UTF-8 解码是有损的，转发出去的文件就再也读不回来了）。
   const raw = Buffer.from(await request.arrayBuffer());
   try {
-    const response = await fetch(`${base}/source/${path.join("/")}`, {
+    const response = await ingestionFetch(`${base}/source/${path.join("/")}`, {
       method: "POST",
       headers: { "Content-Type": request.headers.get("Content-Type") || "application/json" },
       body: raw.length ? raw : Buffer.from("{}"),
@@ -64,3 +66,7 @@ export async function POST(request: Request, context: { params: Promise<{ path: 
     );
   }
 }
+
+export const GET = secureRoute(rawGET);
+
+export const POST = secureRoute(rawPOST);
