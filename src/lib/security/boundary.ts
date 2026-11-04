@@ -1,11 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { safeError } from './safe-error';
 
 export function localSecret(name = 'TRUTHTRACE_SESSION_SECRET'): string {
   const configured = process.env[name];
   if (configured && configured.length >= 32) return configured;
-  const directory = join(process.cwd(), '.truthtrace');
+  const directory = resolve(process.env.TRUTHTRACE_DATA_DIR || '.truthtrace');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, `${name.toLowerCase()}.secret`);
   try { writeFileSync(path, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 }); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
@@ -72,11 +73,12 @@ export function secureRoute<C>(handler: (request: Request, context: C) => Promis
         request=new Request(request.url,{method:request.method,headers,body:body as BodyInit,signal:request.signal});
       }
       const response=await handler(request,context as C);
-      if(response.status>=400) { await response.body?.cancel(); return fail(response.status); }
+      if(response.status>=400) { const detail=await response.json().catch(()=>null);const safe=safeError(detail?.error);return Response.json({...safe,traceId:randomBytes(8).toString('hex'),retryable:response.status===429},{status:response.status,headers:{'Cache-Control':'no-store'}}); }
       response.headers.set('Cache-Control','no-store');
-      if(response.body && response.headers.get('content-type')?.includes('application/x-ndjson')) {
+      if(response.body) {
         const reader=response.body.getReader();let streamReleased=false;
         const finish=()=>{if(!streamReleased){streamReleased=true;activeRequests--;reservedBytes-=reserved;}};
+        void reader.closed.then(finish,finish);
         acquired=false;
         const stream=new ReadableStream({async pull(controller){try{const {done,value}=await reader.read();if(done){finish();controller.close();}else controller.enqueue(value);}catch{finish();controller.error(new Error('Stream failed'));}},async cancel(reason){try{await reader.cancel(reason);}finally{finish();}}});
         return new Response(stream,{status:response.status,headers:response.headers});

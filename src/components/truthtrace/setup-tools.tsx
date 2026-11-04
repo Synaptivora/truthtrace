@@ -1,5 +1,6 @@
 "use client";
 
+import { safeAuthUrl } from "@/lib/security/auth-url";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, ExternalLink, Loader2, Play, RefreshCw, Wrench } from "lucide-react";
 
@@ -26,6 +27,7 @@ type Job = {
   status: "running" | "ok" | "failed";
   steps: Step[];
   lines: string[];
+  authUrl?: string;
   note?: string;
   ok?: boolean;
   error?: string;
@@ -34,15 +36,6 @@ type Job = {
 const ICON: Record<string, string> = {
   pending: "·", running: "…", ok: "✓", skipped: "·", warn: "!", failed: "✗",
 };
-
-/** 从设备流登录输出里摘出授权 URL，方便用户直接点开。 */
-function firstUrl(lines: string[]): string {
-  for (const line of lines) {
-    const hit = line.match(/https?:\/\/[^\s"'<>）)]+/);
-    if (hit) return hit[0];
-  }
-  return "";
-}
 
 export function SetupTools({ onDone }: { onDone?: () => void }) {
   const [detect, setDetect] = useState<Detect | null>(null);
@@ -106,7 +99,7 @@ export function SetupTools({ onDone }: { onDone?: () => void }) {
   }
 
   const c = detect?.checks;
-  const url = firstUrl(job?.lines || []);
+  const url = safeAuthUrl(job?.authUrl);
   const chips = c ? [
     { key: "dws", label: "dws", ok: c.dws.installed, note: c.dws.ok ? `已授权 ${c.dws.user}` : "待扫码" },
     { key: "lark", label: "lark-cli", ok: c.lark.installed, note: c.lark.installed ? "已安装" : "未安装（可选）" },
