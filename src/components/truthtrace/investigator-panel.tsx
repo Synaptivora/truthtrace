@@ -41,7 +41,7 @@ export function InvestigatorPanel({context,initialGoal,routedMode,onGoalChange,o
   const staleCount=task?.executionPlan?.staleResultIds.length??0;
   const finished=task&&["completed","waiting_user"].includes(task.state);
   return <section aria-label="本次调查" className={`investigator-panel investigator-embedded ${ui.panel}`}>
-    <header><div><small>本案调查 · 有来源，可复核</small><h2>{finished?"查到了什么，还缺什么":task?.state==="running"?"我正在核对你的问题":"先确认这次要查清的问题"}</h2></div><button onClick={()=>onConfigure(goal)}><Settings size={15} />模型设置</button></header>
+    <header><div><small>本案调查 · 有来源，可复核</small><h2>{finished?"查到了什么，还缺什么":task?states[task.state]:"先确认这次要查清的问题"}</h2></div><button onClick={()=>onConfigure(goal)}><Settings size={15} />模型设置</button></header>
     {loading&&<div className={ui.notice} role="status">正在恢复本案调查进度…</div>}
     {refreshError&&<div className={ui.warning} role="alert"><strong>暂时无法更新调查进度</strong><p>{refreshError} 已保存的内容仍会保留。</p><button disabled={busy} onClick={()=>setRefreshKey(v=>v+1)}>重新加载进度</button></div>}
     {!loading&&!task&&!context.evidence.length&&<div className={ui.notice}><strong>先添加与问题有关的材料</strong><p>可以上传聊天记录、截图或文件，之后再核对其中的说法。</p><button onClick={()=>onSupplement(undefined,goal)}>添加本案材料</button></div>}
