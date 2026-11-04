@@ -1,3 +1,13 @@
+import { EventEmitter } from "node:events";
+vi.mock("node:dns/promises",()=>({lookup:vi.fn(async()=>[{address:"8.8.8.8",family:4}])}));
+vi.mock("node:https",()=>({request:(url:URL, options:Record<string,unknown>, callback:(response:EventEmitter)=>void)=>{
+ const req=new EventEmitter() as EventEmitter & {end:(body:string)=>void;destroy:()=>void};
+ req.destroy=()=>{};
+ req.end=(body:string)=>{Promise.resolve(fetch(url,{...options,body} as RequestInit)).then(async response=>{
+ const res=Object.assign(new EventEmitter(),{statusCode:response.status});callback(res);
+ res.emit("data",Buffer.from(await response.arrayBuffer()));res.emit("end");
+ }).catch(error=>req.emit("error",error));};return req;
+}}));
 import { afterEach, expect, it, vi } from "vitest";
 import { analysisSources, resolveAnalysisSources, analyzeWithConnection } from "@/lib/ai/shared-model";
 import { createRuleAnalysis } from "@/lib/ai/rule";

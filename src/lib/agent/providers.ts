@@ -49,8 +49,8 @@ export function resolveConnection(input?: Connection): Connection | null {
   const config = input ?? serverConnection();
   if (!config) return null;
   const url = new URL(config.baseUrl);
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || (process.env.TRUTHTRACE_MODEL_PRIVATE_ORIGINS??"").split(",").map(value=>value.trim()).includes(url.origin);
   if (url.username || url.password || url.search || url.hash || (url.protocol !== "https:" && !(local && url.protocol === "http:"))) throw new Error("模型地址需使用 HTTPS；本地服务可使用 localhost HTTP。");
   if (!config.apiKey && config.provider !== "ollama") throw new Error("请在模型设置填写 API Key，或使用服务端配置。");
-  return { ...config, baseUrl: config.baseUrl.replace(/\/+$/, "") };
+  return Object.freeze({ ...config, baseUrl: config.baseUrl.replace(/\/+$/, "") });
 }

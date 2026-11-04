@@ -1,3 +1,13 @@
+import { EventEmitter } from "node:events";
+vi.mock("node:dns/promises",()=>({lookup:vi.fn(async()=>[{address:"8.8.8.8",family:4}])}));
+vi.mock("node:https",()=>({request:(url:URL, options:Record<string,unknown>, callback:(response:EventEmitter)=>void)=>{
+ const req=new EventEmitter() as EventEmitter & {end:(body:string)=>void;destroy:()=>void};
+ req.destroy=()=>{};
+ req.end=(body:string)=>{Promise.resolve(fetch(url,{...options,body} as RequestInit)).then(async response=>{
+ const res=Object.assign(new EventEmitter(),{statusCode:response.status});callback(res);
+ res.emit("data",Buffer.from(await response.arrayBuffer()));res.emit("end");
+ }).catch(error=>req.emit("error",error));};return req;
+}}));
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runAgent, makeTools, agentTools } from "@/lib/agent/runner";
 import { AgentRequestSchema, type AgentRequest } from "@/lib/agent/contracts";
@@ -124,4 +134,11 @@ describe("chat route", () => {
     const response = await POST(new Request("http://localhost/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://unrelated.example" }, body: JSON.stringify(input) }));
     expect(response.status).toBe(400);
   });
+});
+
+describe("transport metadata",()=>{
+ it("reports observed tool support without inventing vision capability",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(reply({...toolReply(),usage:{prompt_tokens:10,completion_tokens:5}})));const result=await modelStep(connection,[],[],new AbortController().signal);expect(result.usage).toEqual({inputTokens:10,outputTokens:5});expect(result.capabilities).toEqual({text:"unknown",tools:"observed",vision:"unknown"});});
+ it("classifies retryable HTTP without leaking upstream bodies",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response("secret",{status:429})));await expect(modelStep(connection,[],[],new AbortController().signal)).rejects.toMatchObject({code:"MODEL_HTTP",retryable:true});});
+ it("maps malformed responses to a safe error",async()=>{vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response("secret")));await expect(modelStep(connection,[],[],new AbortController().signal)).rejects.toMatchObject({code:"MODEL_RESPONSE",retryable:false});});
+ it("freezes resolved credential destination",()=>{const resolved=resolveConnection(connection)!;expect(Object.isFrozen(resolved)).toBe(true);expect(()=>{resolved.baseUrl="https://attacker.example";}).toThrow();});
 });
