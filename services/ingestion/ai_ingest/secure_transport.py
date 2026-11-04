@@ -5,6 +5,9 @@ import json
 import os
 import socket
 import ssl
+import threading
+import time
+import queue
 from urllib.parse import urlsplit
 
 def public_address(value):
@@ -17,6 +20,8 @@ def public_address(value):
 
 def post_json(config, path, body):
     connection = None
+    timer = None
+    deadline = time.monotonic() + min(60, max(1, float(config.get("timeout", 60))))
     try:
         url = urlsplit(config['base_url'].rstrip('/') + '/' + path)
         port = url.port or (443 if url.scheme == 'https' else 80)
@@ -25,13 +30,27 @@ def post_json(config, path, body):
         allowed = origin in {x.strip() for x in os.environ.get('TRUTHTRACE_MODEL_PRIVATE_ORIGINS', '').split(',') if x.strip()}
         if not host or url.username or url.password or url.query or url.fragment or not (url.scheme == 'https' or allowed and url.scheme == 'http'):
             raise ValueError()
-        addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        resolved = queue.Queue(maxsize=1)
+        def resolve():
+            try: resolved.put((socket.getaddrinfo(host, port, type=socket.SOCK_STREAM), None))
+            except Exception as error: resolved.put((None, error))
+        threading.Thread(target=resolve, daemon=True).start()
+        addresses, error = resolved.get(timeout=max(.001, deadline-time.monotonic()))
+        if error: raise error
         if not addresses or not allowed and any(not public_address(a[4][0]) for a in addresses):
             raise ValueError()
         family, kind, protocol, _, address = addresses[0]
-        timeout = min(60, max(1, float(config.get('timeout', 60))))
+        timeout = deadline-time.monotonic()
+        if timeout <= 0: raise TimeoutError()
         # Resolve once; connect to the exact authorized sockaddr, preserving TLS SNI.
         sock = socket.socket(family, kind, protocol)
+        def expire():
+            try: sock.shutdown(socket.SHUT_RDWR)
+            except OSError: pass
+            sock.close()
+        timer = threading.Timer(timeout, expire)
+        timer.daemon = True
+        timer.start()
         try:
             sock.settimeout(timeout)
             sock.connect(address)
@@ -46,11 +65,14 @@ def post_json(config, path, body):
             raw = response.read(8 * 1024 * 1024 + 1)
             if len(raw) > 8 * 1024 * 1024:
                 raise ValueError()
-            return json.loads(raw)
+            result = json.loads(raw)
+            if time.monotonic() >= deadline: raise TimeoutError()
+            return result
         finally:
             sock.close()
     except Exception:
         raise RuntimeError('模型连接失败、目的地址未授权或响应无效') from None
     finally:
+        if timer: timer.cancel()
         if connection:
             connection.close()

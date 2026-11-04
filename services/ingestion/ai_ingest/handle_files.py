@@ -30,7 +30,16 @@ class HandleFiles:
                 lock.seek(0)
                 if os.name == 'nt':
                     import msvcrt
-                    lock.seek(0); msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+                    # Explicit deadline instead of LK_LOCK's implicit ten-attempt limit.
+                    deadline = time.monotonic() + 60
+                    while True:
+                        try:
+                            lock.seek(0); msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+                            break
+                        except OSError:
+                            if time.monotonic() >= deadline:
+                                raise TimeoutError('渠道暂存正在使用，请稍后重试') from None
+                            time.sleep(.05)
                 else:
                     import fcntl
                     fcntl.flock(lock, fcntl.LOCK_EX)

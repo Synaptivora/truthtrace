@@ -83,4 +83,37 @@ class ReviewSecurity(unittest.TestCase):
      body=b'--fixture\r\nContent-Disposition: form-data; name="source"\r\n\r\ninvalid-source\r\n--fixture\r\nContent-Disposition: form-data; name="file"; filename="bad.json"\r\nContent-Type: application/json\r\n\r\ninvalid\r\n--fixture--\r\n'
      c=http.client.HTTPConnection('127.0.0.1',app.server_port);c.request('POST','/source/conversations',body,{'Authorization':'Bearer test-only-token','Content-Type':'multipart/form-data; boundary=fixture'});r=c.getresponse();self.assertEqual(r.status,404);r.read();c.close();self.assertEqual(list(Path(root).glob('tt-*')),[])
     finally:app.shutdown();app.server_close()
+class DeadlineSecurity(unittest.TestCase):
+ def test_slow_response_obeys_total_deadline(self):
+  class Slow(BaseHTTPRequestHandler):
+   def log_message(self,*args):pass
+   def do_POST(self):
+    self.rfile.read(int(self.headers['Content-Length']));self.send_response(200);self.send_header('Content-Length','7');self.end_headers()
+    try:
+     for b in b'{"x":1}':self.wfile.write(bytes([b]));self.wfile.flush();time.sleep(.3)
+    except OSError:pass
+  app=HTTPServer(('127.0.0.1',0),Slow);threading.Thread(target=app.serve_forever,daemon=True).start();origin=f'http://127.0.0.1:{app.server_port}'
+  try:
+   with patch.dict(os.environ,{'TRUTHTRACE_MODEL_PRIVATE_ORIGINS':origin}):
+    start=time.monotonic()
+    with self.assertRaises(RuntimeError):OpenAICompatibleClient({'base_url':origin,'api_key':'fixture','timeout':1})._post('x',{})
+    self.assertLess(time.monotonic()-start,1.7)
+  finally:app.shutdown();app.server_close()
+ def test_dns_consumes_total_deadline(self):
+  def slow(*args,**kwargs):time.sleep(2);return []
+  with patch('ai_ingest.secure_transport.socket.getaddrinfo',slow):
+   start=time.monotonic()
+   with self.assertRaises(RuntimeError):OpenAICompatibleClient({'base_url':'https://fixture.invalid','api_key':'fixture','timeout':1})._post('x',{})
+   self.assertLess(time.monotonic()-start,1.7)
+ @unittest.skipUnless(os.name=='nt','Windows locking regression')
+ def test_reader_longer_than_lk_lock_retry_window(self):
+  with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{'TRUTHTRACE_HANDLE_DIR':root}):
+   reader,writer=HandleFiles(),HandleFiles();errors=[];done=threading.Event()
+   def save():
+    try:writer.save(b'fixture','x.json')
+    except Exception as error:errors.append(type(error).__name__)
+    finally:done.set()
+   with reader.guard():
+    t=threading.Thread(target=save);t.start();self.assertFalse(done.wait(10.5))
+   t.join(3);self.assertTrue(done.is_set());self.assertEqual(errors,[])
 if __name__=='__main__':unittest.main()
