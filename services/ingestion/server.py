@@ -1241,6 +1241,23 @@ def sniff_mime(data: bytes):
 def build_evidence(filename, mime, data: bytes, origin: str | None = None,
                    max_chars: int | None = None, page_range: str | None = None,
                    base_url: str | None = None) -> dict:
+    if len(data) > REQUEST_LIMIT:
+        raise ValueError("Attachment resource limit")
+    if data.startswith(b"PK"):
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            members = archive.infolist()
+            if len(members) > 2000 or sum(x.file_size for x in members) > 100 * 1024 * 1024 or any(x.file_size > max(1, x.compress_size) * 200 for x in members):
+                raise ValueError("Archive resource limit")
+    if data.startswith(b"%PDF"):
+        from pypdf import PdfReader
+        if len(PdfReader(io.BytesIO(data)).pages) > 500:
+            raise ValueError("PDF page limit")
+    if (mime or "").startswith("image/"):
+        from PIL import Image
+        with Image.open(io.BytesIO(data)) as image:
+            if image.width * image.height > 25000000:
+                raise ValueError("Image pixel limit")
     # MIME 不可靠时按魔数兜底（否则 PDF 会被当文本，二进制倒进 content）。
     # 放在闸门之前，是因为闸门要按类型决定适不适用——判断类型需要可靠的 MIME。
     if (mime or "").lower() in ("", "application/octet-stream", "binary/octet-stream"):
@@ -1314,21 +1331,48 @@ def build_evidence(filename, mime, data: bytes, origin: str | None = None,
 # ---------------------------------------------------------------------------
 # 6) HTTP 服务
 # ---------------------------------------------------------------------------
+import hmac
+import threading
+import secrets
+
+REQUEST_LIMIT = min(int(os.environ.get("TRUTHTRACE_REQUEST_LIMIT", 25 * 1024 * 1024)), 25 * 1024 * 1024)
+REQUEST_SLOTS = threading.BoundedSemaphore(4)
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
-    # CORS：默认全开，因为存在「C 直连 A」的部署形态（大文件绕开 B 的 8MB 前置检查）。
-    # 走 B 转发时这些头无害；直连时没有它们，浏览器连 OPTIONS 预检都过不去。
-    CORS_ALLOW_ORIGIN = os.environ.get("CORS_ALLOW_ORIGIN", "*")
+    def _trusted(self, authenticate=True):
+        self.connection.settimeout(30)
+        host = self.headers.get("Host", "")
+        allowed_hosts = {"localhost", "127.0.0.1", "[::1]"}
+        hostname = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+        if host.startswith("["):
+            hostname = host.split("]", 1)[0] + "]"
+        origin = self.headers.get("Origin")
+        allowed_origins = {x.strip() for x in os.environ.get("TRUTHTRACE_INGESTION_ORIGINS", "").split(",") if x.strip() and x.strip() != "*"}
+        if hostname not in allowed_hosts or (origin is not None and (origin == "null" or origin not in allowed_origins)):
+            self._send_json({"error": "请求来源不受信任"}, 403)
+            return False
+        token = os.environ.get("TRUTHTRACE_INGESTION_TOKEN", "")
+        if authenticate and (not token or not hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + token)):
+            self._send_json({"error": "需要服务认证"}, 401)
+            return False
+        return True
 
     def _cors(self):
-        self.send_header("Access-Control-Allow-Origin", self.CORS_ALLOW_ORIGIN)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Access-Control-Max-Age", "86400")
+        origin = self.headers.get("Origin")
+        allowed = os.environ.get("TRUTHTRACE_INGESTION_ORIGINS", "").split(",")
+        if origin and origin != "null" and origin in [x.strip() for x in allowed]:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def _send_json(self, obj, code=200):
+        if code >= 400:
+            obj = {"error": "请求被拒绝或处理失败", "code": "INGESTION_" + str(code), "message": "请求被拒绝或处理失败", "traceId": secrets.token_hex(8), "retryable": code in (429, 502, 503, 504)}
+            self.close_connection = True
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self._cors()
@@ -1338,6 +1382,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_OPTIONS(self):
+        if not self._trusted(False):
+            return
         """预检请求：只回 204 + CORS 头，不读请求体。"""
         self.send_response(204)
         self._cors()
@@ -1345,6 +1391,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if not self._trusted(urlparse(self.path).path.rstrip("/") != "/health"):
+            return
         path = urlparse(self.path).path.rstrip("/")
         if path == "/health":
             self._send_json({"status": "ok"})
@@ -1425,23 +1473,53 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(chunk)
 
     def _read_body(self):
-        """读完整请求体，**不设大小上限**。
-
-        为什么不对请求体设限：multipart 的体积天然大于文件本身，用 Content-Length
-        当闸门会让边界值（正好 100MB 的文件）被误拒，而且拒的是「请求」不是「附件」。
-        体积判断只对解析出来的 file 字段做，见 build_evidence 的 MAX_CONTENT_SIZE。
-        """
+        if self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) != 1:
+            self._send_json({}, 400 if self.headers.get("Transfer-Encoding") else 411)
+            return None
         try:
-            length = int(self.headers.get("Content-Length", 0))
+            raw_length = self.headers["Content-Length"]
+            if not raw_length.isascii() or not raw_length.isdecimal():
+                raise ValueError()
+            length = int(raw_length)
         except ValueError:
-            self._send_json({"error": "Content-Length 非法"}, 400)
+            self._send_json({}, 400)
             return None
-        if length == 0:
-            self._send_json({"error": "请求体为空"}, 400)
+        if length > REQUEST_LIMIT:
+            self._send_json({}, 413)
             return None
-        return self.rfile.read(length)
+        if length <= 0:
+            self._send_json({}, 400)
+            return None
+        chunks = bytearray()
+        try:
+            while len(chunks) < length:
+                chunk = self.rfile.read(min(65536, length - len(chunks)))
+                if not chunk:
+                    self._send_json({}, 400)
+                    return None
+                chunks.extend(chunk)
+                if len(chunks) > REQUEST_LIMIT:
+                    self._send_json({}, 413)
+                    return None
+        except (TimeoutError, OSError):
+            self._send_json({}, 408)
+            return None
+        return bytes(chunks)
 
     def do_POST(self):
+        if not self._trusted():
+            return
+        if not REQUEST_SLOTS.acquire(blocking=False):
+            self._send_json({}, 429)
+            return
+        try:
+            self._post_authorized()
+        except Exception:
+            self._send_json({}, 500)
+        finally:
+            REQUEST_SLOTS.release()
+
+    def _post_authorized(self):
         parsed_url = urlparse(self.path)
         path = parsed_url.path.rstrip("/")
         query = parse_qs(parsed_url.query)
@@ -1680,6 +1758,10 @@ def main():
                 port = int(sys.argv[i + 1])
             except ValueError:
                 pass
+    if os.environ.get("INGESTION_HOST", "127.0.0.1") not in ("127.0.0.1", "localhost", "::1"):
+        raise SystemExit("Ingestion requires loopback binding")
+    if not os.environ.get("TRUTHTRACE_INGESTION_TOKEN"):
+        raise SystemExit("TRUTHTRACE_INGESTION_TOKEN is required")
     server = ThreadingHTTPServer((os.environ.get("INGESTION_HOST", "127.0.0.1"), port), Handler)
     print(f"[A 解析服务] 已启动: http://localhost:{port}")
     print(f"  POST /parse      单文件 → 单条 evidence (B 当前兼容)")
