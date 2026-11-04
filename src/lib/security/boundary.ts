@@ -47,8 +47,10 @@ export async function boundedBody(request:Request,limit:number,timeoutMs=15_000)
  try {while(true){const {value,done}=await Promise.race([reader.read(),deadline]);if(done)break;size+=value.byteLength;if(size>limit){void reader.cancel().catch(()=>{});throw new BodyLimitError(413);}chunks.push(value);}return Buffer.concat(chunks,size);}
  finally{clearTimeout(timer);reader.releaseLock();}
 }
+export function secureRoute(handler:(request:Request)=>Promise<Response>):(request:Request)=>Promise<Response>;
+export function secureRoute<C>(handler:(request:Request,context:C)=>Promise<Response>):(request:Request,context:C)=>Promise<Response>;
 export function secureRoute<C>(handler: (request: Request, context: C) => Promise<Response>) {
-  return async (request?: Request, context?: C): Promise<Response> => {
+  return async (request: Request, context: C): Promise<Response> => {
     const fail = (status:number) => Response.json({error:status===413?'请求体超过限制':'请求未获允许或处理失败',code:`HTTP_${status}`,traceId:randomBytes(8).toString('hex'),retryable:status===429},{status,headers:{'Cache-Control':'no-store'}});
     let reserved=0;let acquired=false;
     const release=()=>{if(acquired){activeRequests--;reservedBytes-=reserved;acquired=false;}};
