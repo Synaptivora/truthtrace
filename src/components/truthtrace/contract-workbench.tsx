@@ -11,6 +11,7 @@ import { materialKinds, uniqueRefs } from "./case-view";
 import type { CaseAnalysis } from "./api-client";
 import { EvidenceContent } from "./evidence-content";
 import { EvidenceThumbnail } from "./evidence-thumbnail";
+import { CommitmentPanel } from "./commitments/panel";
 import { reportDocument, renderReport } from "@/lib/report-render";
 
 import avatar from "./assets/inspector-avatar.png";
@@ -28,7 +29,7 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
   useEffect(() => () => { for (const url of downloadUrls.current) URL.revokeObjectURL(url); downloadUrls.current.clear(); }, []);
   const upload = useRef<HTMLInputElement>(null);
   const request = useRef<AbortController | null>(null);
-  const [view, setView] = useState<"graph" | "timeline" | "evidence" | "actions">("graph");
+  const [view, setView] = useState<"graph" | "timeline" | "evidence" | "actions" | "commitments">("graph");
   const [selected, setSelected] = useState<string | null>(null);
   const [focused, setFocused] = useState<string[]>([]);
   const [immersive, setImmersive] = useState(false);
@@ -109,9 +110,9 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
     <div className="contract-columns">
       <aside className="contract-catalog"><h2>证据档案 <small>{evidence.length}</small></h2>{evidence.map((item, index) => <button key={item.id} type="button" onClick={() => openSource(item.id)} className={focused.includes(item.id) ? "is-focused" : ""}><FileText size={17} /><span><small>材料 {String(index + 1).padStart(2, "0")}</small><strong>{item.name}</strong><em>{item.source || materialKinds[item.kind]}</em></span></button>)}</aside>
       <section className="contract-investigation">
-        <header><h2>调查工作台</h2><nav aria-label="调查视图">{([["graph", "关系图", GitBranch], ["timeline", "时间线", Clock3], ["evidence", "证据档案", FolderOpen], ["actions", "补证建议", FileText]] as const).map(([key, label, Icon]) => <button key={key} aria-pressed={view === key} onClick={() => setView(key)}><Icon size={14} />{label}</button>)}</nav><button onClick={() => void toggleFullscreen()} className="contract-expand" aria-label={immersive ? "退出沉浸展示" : "沉浸展示"}><Maximize size={16} /></button></header>
+        <header><h2>调查工作台</h2><nav aria-label="调查视图">{([["graph", "关系图", GitBranch], ["timeline", "时间线", Clock3], ["evidence", "证据档案", FolderOpen], ["actions", "补证建议", FileText], ["commitments", "承诺追踪", Flag]] as const).map(([key, label, Icon]) => <button key={key} aria-pressed={view === key} onClick={() => setView(key)}><Icon size={14} />{label}</button>)}</nav><button onClick={() => void toggleFullscreen()} className="contract-expand" aria-label={immersive ? "退出沉浸展示" : "沉浸展示"}><Maximize size={16} /></button></header>
         {focused.length > 0 && <div className="contract-focus-bar" role="status"><span>已定位 {focused.length} 份关联证据</span><button onClick={() => setFocused([])}>显示全部 ×</button></div>}
-        <div className="contract-content">{view === "graph" ? <RelationshipGraph analysis={analysis} evidence={evidence} focusedEvidenceIds={focused} onOpenEvidence={openSource} /> : view === "timeline" ? <Timeline analysis={analysis} evidence={evidence} onOpenEvidence={openSource} /> : view === "evidence" ? <div className="contract-evidence-grid">{evidence.map(item => <button key={item.id} className="contract-material-card" onClick={() => openSource(item.id)}><EvidenceThumbnail item={item} /><strong>{item.name}</strong><span>{materialKinds[item.kind]} · 查看原文 ↗</span></button>)}</div> : <div className="contract-records">
+        <div className="contract-content">{view === "graph" ? <RelationshipGraph analysis={analysis} evidence={evidence} focusedEvidenceIds={focused} onOpenEvidence={openSource} /> : view === "timeline" ? <Timeline analysis={analysis} evidence={evidence} onOpenEvidence={openSource} /> : view === "evidence" ? <div className="contract-evidence-grid">{evidence.map(item => <button key={item.id} className="contract-material-card" onClick={() => openSource(item.id)}><EvidenceThumbnail item={item} /><strong>{item.name}</strong><span>{materialKinds[item.kind]} · 查看原文 ↗</span></button>)}</div> : view === "commitments" ? <CommitmentPanel result={result} onOpen={openSource} onReview={()=>void reanalyze()} /> : <div className="contract-records">
           <h3>承诺追踪</h3>{analysis.commitments.map(item => <article key={item.id}><strong>{item.commitment}</strong><p>{item.dueLabel} · {{ fulfilled: "已履行", pending: "待履行", disputed: "履行存疑", unknown: "尚未明确" }[item.status]}</p><div>{sourceChips(item.evidenceRefs)}</div></article>)}{analysis.commitments.length === 0 && <p>当前结果未提取到明确承诺。</p>}
           <h3>下一步补证</h3>{(analysis.analysisMode === "model" ? analysis.evidenceGaps : []).map(item => <article key={item.id}><strong>{item.title}</strong><p>{item.reason}</p><p>{item.suggestedEvidence}</p><div>{sourceChips(item.evidenceRefs)}</div></article>)}{(analysis.evidenceGaps.length === 0 || analysis.analysisMode === "mock") && <p>{analysis.analysisMode === "mock" ? "模拟分析未生成补证建议。" : "当前结果没有补证建议。"}</p>}
         </div>}</div>
