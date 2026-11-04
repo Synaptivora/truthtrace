@@ -1,62 +1,16 @@
 "use client";
-
-import { useState } from "react";
-import { Clock3, Quote } from "lucide-react";
-import type { AnalysisResult, Evidence, EvidenceRef } from "@/lib/contracts";
-
-import { mergeTimeline } from "./truthtrace/case-view";
-
-type TimelineProps = {
-  analysis: AnalysisResult;
-  evidence: Evidence[];
-  onOpenEvidence: (evidenceId: string) => void;
-  onOpenReference?: (ref:EvidenceRef)=>void;
-};
-
-export function Timeline({ analysis, evidence, onOpenEvidence,onOpenReference }: TimelineProps) {
-  const [shown,setShown]=useState<number|null>(null);
-  const events = mergeTimeline(analysis.events);
-  const timed=events.filter(event=>event.occurredAt&&event.timePrecision==="exact"&&event.evidenceRefs.length);
-  const count=Math.min(shown??timed.length,timed.length);
-  const visible=events.filter(event=>!timed.includes(event)||timed.indexOf(event)<count);
-
-  if (events.length === 0) return <div className="empty-state">暂无可展示的事件。</div>;
-
-  return (
-    <div className="timeline-scroll">
-      {timed.length>0&&<label>按有明确时间的事件回看 {count}/{timed.length}<input aria-label="时间线回看" type="range" min={0} max={timed.length} value={count} onChange={e=>setShown(Number(e.target.value))}/></label>}
-      <p>约略时间和未知时间单独保留，不推断先后。事件来自材料陈述，仍需核实。</p>
-      <div className="timeline">
-        {visible.map((event) => (
-          <article className="timeline-item" key={event.id}>
-            <div className="timeline-marker" />
-            <div className="timeline-time">
-              <Clock3 size={14} />
-              {event.timeLabel}
-            </div>
-            <div className="timeline-card">
-              <div className="timeline-card-heading">
-                <h3>{event.title}</h3>
-                <span className={`precision precision-${event.timePrecision}`}>
-                  {event.timePrecision === "exact" ? "明确时间" : event.timePrecision === "approximate" ? "约略时间" : "时间未知"}
-                </span>
-              </div>
-              {event.description.trim() !== event.title.trim() && <p>{event.description}</p>}
-              <div className="evidence-chips">
-                {[...new Map(event.evidenceRefs.map(ref => [ref.evidenceId, ref])).values()].map((ref, index) => {
-                  const source = evidence.find((item) => item.id === ref.evidenceId);
-                  return (
-                    <button key={`${ref.evidenceId}-${index}`} onClick={() => onOpenReference?onOpenReference(ref):onOpenEvidence(ref.evidenceId)}>
-                      <Quote size={12} />
-                      {source?.name ?? ref.evidenceId}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
+import {useId,useState} from "react";
+import {Clock3,Quote,RotateCcw} from "lucide-react";
+import type {AnalysisResult,Evidence,EvidenceRef} from "@/lib/contracts";
+import {mergeTimeline} from "./truthtrace/case-view";
+import styles from "./timeline.module.css";
+type TimelineProps={analysis:AnalysisResult;evidence:Evidence[];onOpenEvidence:(id:string)=>void;onOpenReference?:(ref:EvidenceRef)=>void};
+export function Timeline({analysis,evidence,onOpenEvidence,onOpenReference}:TimelineProps){
+ const [shown,setShown]=useState<number|null>(null);const hint=useId();
+ const events=mergeTimeline(analysis.events);
+ const timed=events.filter(e=>e.occurredAt&&e.timePrecision==="exact"&&e.evidenceRefs.length);
+ const untimed=events.filter(e=>!timed.includes(e));const count=Math.min(shown??timed.length,timed.length);
+ const renderEvent=(event:typeof events[number])=><article className="timeline-item" key={event.id}><div className="timeline-marker"/><div className="timeline-time"><Clock3 size={14} aria-hidden="true"/>{event.timeLabel}</div><div className="timeline-card"><div className="timeline-card-heading"><h3>{event.title}</h3><span className={`precision precision-${event.timePrecision}`}>{event.timePrecision==="exact"?"明确时间":event.timePrecision==="approximate"?"约略时间":"时间未知"}</span></div>{event.description.trim()!==event.title.trim()&&<p>{event.description}</p>}<div className="evidence-chips">{[...new Map(event.evidenceRefs.map(ref=>[JSON.stringify([ref.evidenceId,ref.provenance?.version,ref.quote]),ref])).values()].map((ref,index)=>{const source=evidence.find(e=>e.id===ref.evidenceId);return <button type="button" key={index} disabled={!source&&!onOpenReference} onClick={()=>onOpenReference?onOpenReference(ref):onOpenEvidence(ref.evidenceId)} title={`查看引用原文${ref.provenance?` · v${ref.provenance.version}`:" · 旧版引用"}`}><Quote size={12} aria-hidden="true"/>{source?.name??"来源暂不可用"}{ref.provenance&&<span> · v{ref.provenance.version}</span>}</button>;})}</div>{!event.evidenceRefs.length&&<p className={styles.note}>尚无材料引用，此事件需要补充依据。</p>}</div></article>;
+ if(!events.length)return <div className={`empty-state ${styles.empty}`}><Clock3 size={24} aria-hidden="true"/><strong>还没有可展示的事件</strong><p>添加聊天记录或其他材料后，可在此查看有来源的事件与时间。</p></div>;
+ return <div className={`timeline-scroll ${styles.root}`}><section className={styles.controls} aria-label="时间线回看控制"><div className={styles.heading}><div><strong>按明确时间回看</strong><p id={hint}>仅回看有引用且时间明确的事件。材料中的陈述仍需核实。</p></div><button type="button" onClick={()=>setShown(null)} disabled={count===timed.length}><RotateCcw size={14} aria-hidden="true"/>显示全部</button></div>{timed.length>0?<><label className={styles.rangeLabel}>展示进度 <output aria-live="polite">{count} / {timed.length} 个事件</output><input aria-label="时间线回看" aria-describedby={hint} aria-valuetext={`显示 ${count} 个，共 ${timed.length} 个明确时间事件`} type="range" min={0} max={timed.length} step={1} value={count} onChange={e=>setShown(Number(e.target.value))}/></label><p className={styles.note}>{count?`当前回看到：${timed[count-1].timeLabel}`:"拖动滑块或使用方向键开始回看。"}</p></>:<p className={styles.note}>暂无同时具有明确时间和材料引用的事件。</p>}</section><div className="timeline">{timed.slice(0,count).map(renderEvent)}</div>{timed.length>0&&count===0&&<p className={styles.placeholder}>尚未展开明确时间事件，下方保留其他待定位记录。</p>}{untimed.length>0&&<section className={styles.uncertain} aria-label="时间待定位的事件"><h3>时间待定位 · {untimed.length}</h3><p className={styles.note}>约略时间、未知时间或缺少引用的记录单独展示，不据此推断先后。</p><div className="timeline">{untimed.map(renderEvent)}</div></section>}</div>;
 }
