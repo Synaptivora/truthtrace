@@ -56,3 +56,10 @@ TT14 --> TT16
 runtime：04完成并释放后10；runner：05完成后09。08接入runner/runtime必须交给当期所有者或独立串行集成PR。store只有06写；其他模块提接口需求。API由02释放后其他任务才可新增路由。
 公共schema由00管理 src/lib/contracts.ts、src/lib/agent/contracts.ts、src/lib/investigator/contracts.ts。contract-workbench由11独占，13/14接线串行。package.json/锁文件/公共测试配置由00协调，不并发编辑。
 PR顺序：00文档审查→各安全PR独立审查→整合回归→05/06→08→后续。每PR附复现、测试、兼容、风险与回滚。维护待开始/进行中/待审查/阻塞/已完成状态，不把分派标为完成。
+## 2026-11-04 第一批实施记录
+远端main仍为10202a6。独立PR：TT00 #17，TT03 #18，TT04 #19，TT07 #20，TT11第一阶段 #21，TT01 #22，TT02 #23。全部draft，未合并main。
+当前集成分支integration/tt-v2-20261104。121项单测通过，Next webpack生产构建通过；默认Turbopack受工作树node_modules junction限制，不能将webpack通过写成默认build通过。浏览器四条回归正在运行。
+独立审查已修：固定DNS lookup all回调、流结束后释放并发、所有默认启动回环绑定、setup日志脱敏、结构化官方设备登录URL、Next route typegen签名。渠道调查已接受控ingestionFetch。
+TT01仍有stateful source/parse_chat CPU隔离、OS内存隔离及独立大附件归档待处理；当前仅受控本机候选，不批准公网。
+TT07生产路径离线基线70/73、候选73/73；语义质量NOT_MEASURED，gold待人工审核，不冒充真实模型验证。
+TT05/06/08仍等待第一批检查门槛，未开始核心修改。
