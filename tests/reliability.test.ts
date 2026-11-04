@@ -20,7 +20,7 @@ it("links explicit mentions without inferring relations between all group member
   const a=createRuleAnalysis([evidence]);expect(a.relationships).toHaveLength(1);expect(a.relationships[0].label).toBe("明确提及（@）");expect(a.people.every(p=>p.role==="发言人")).toBe(true);
 });
 it("resolves source handles to exact host-owned quotes, rejecting unknown handles",()=>{
-  const sources=analysisSources([evidence]);const output=resolveAnalysisSources({people:[{evidenceRefs:[{sourceId:"R1",quote:"伪造"}]}]},sources);
+  const sources=analysisSources([evidence]);expect(()=>resolveAnalysisSources({people:[{evidenceRefs:[{sourceId:"R1",quote:"伪造"}]}]},sources)).toThrow();const output=resolveAnalysisSources({people:[{evidenceRefs:[{sourceId:"R1"}]}]},sources);
   expect((output.people as {evidenceRefs:{quote:string}[]}[])[0].evidenceRefs[0].quote).toBe(evidence.content.split("\n")[0]);
   expect(()=>resolveAnalysisSources({people:[{evidenceRefs:[{sourceId:"R99"}]}]},sources)).toThrow("未知原文编号");
 });
