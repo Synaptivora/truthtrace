@@ -1,10 +1,11 @@
+import {validateEvidenceRef} from "../evidence/provenance";
 import {EvidenceIndex} from "../search";
 import {segmentEvidence} from "../evidence-index/segments";
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { AnalysisResultSchema, EvidenceSchema, type Evidence } from "../contracts";
+import { AnalysisResultSchema, EvidenceSchema, type Evidence, type EvidenceRef } from "../contracts";
 import { z } from "zod";
 import { TaskInputSchema, taskStages, type Task, type Segment, type TaskLease } from "./contracts";
 
@@ -51,9 +52,8 @@ export class Store {
     const write = () => {
       const old=this.db.prepare("SELECT body FROM cases WHERE id=?").get(c.caseId) as {body:string}|undefined;
       const before=old?JSON.parse(old.body) as SavedCase:undefined;
-      const aliases=new Map<string,string>();
-      c.evidence = [...new Map(c.evidence.map(e => {const saved=this.saveEvidence(c.caseId,e);aliases.set(e.id,saved.id);return [saved.id,saved] as const;})).values()];
-      for(const collection of [c.analysis.people,c.analysis.relationships,c.analysis.events,c.analysis.contradictions,c.analysis.commitments,c.analysis.evidenceGaps])for(const item of collection)for(const ref of item.evidenceRefs)ref.evidenceId=aliases.get(ref.evidenceId)||ref.evidenceId;
+      c.evidence = [...new Map(c.evidence.map(e => {const saved=this.saveEvidence(c.caseId,e);return [saved.id,saved] as const;})).values()];
+      for(const collection of [c.analysis.people,c.analysis.relationships,c.analysis.events,c.analysis.contradictions,c.analysis.commitments,c.analysis.evidenceGaps])for(const item of collection)item.evidenceRefs=item.evidenceRefs.map(ref=>this.validateStoredRef(c.caseId,ref,c.evidence));
       this.db.prepare("INSERT INTO cases VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(c.caseId, JSON.stringify(c));
       if(!insideTransaction&&before&&JSON.stringify(before.evidence.map(e=>[e.id,e.kind,e.content]))!==JSON.stringify(c.evidence.map(e=>[e.id,e.kind,e.content])))for(const t of this.tasks(c.caseId)){
         t.stale={reason:"evidence_changed",since:new Date().toISOString(),evidenceIds:c.evidence.map(e=>e.id)};
@@ -63,6 +63,21 @@ export class Store {
       return c;
     };
     return insideTransaction?write():this.transaction(write);
+  }
+  private validateStoredRef(caseId:string,ref:EvidenceRef,current:Evidence[]):EvidenceRef {
+    if(ref.citationValidation==="validated"&&!ref.provenance)throw new Error("已校验引用必须包含版本来源");
+    const p=ref.provenance;
+    if(!p)return validateEvidenceRef(ref,current);
+    if(p.caseId!==caseId||p.evidenceId!==ref.evidenceId)throw new Error("引用案件或证据身份不匹配");
+    const row=this.db.prepare("SELECT body,hash FROM evidence WHERE case_id=? AND id=? AND version=?").get(caseId,ref.evidenceId,p.version) as {body:string;hash:string}|undefined;
+    if(!row)throw new Error("引用历史版本不存在");
+    const e={...JSON.parse(row.body),version:p.version} as Evidence;
+    if(createHash("sha256").update(e.kind+"\0"+e.content).digest("hex")!==row.hash)throw new Error("证据存储hash不匹配");
+    if(p.originalHash){let original:Buffer;try{original=readFileSync(join(this.directory,"originals",p.originalHash));}catch{throw new Error("引用原件不存在");}if(createHash("sha256").update(original).digest("hex")!==p.originalHash)throw new Error("引用原件hash不匹配");}
+    if(ref.citationValidation==="validated"&&(e.kind==="image"||p.verificationMethod!=="exact_text"))throw new Error("视觉推测不能标记逐字校验");
+    const segments:Segment[]=[];const size=e.kind==="image"?e.content.length:4000;
+    for(let start=0;start<e.content.length;start+=size)segments.push({id:`${e.id}@${p.version}:${start}`,evidenceId:e.id,version:p.version,name:e.name,kind:e.kind,start,end:Math.min(start+size,e.content.length),content:e.content.slice(start,start+size)});
+    return validateEvidenceRef(ref,[e],{caseId,evidence:[e],segments});
   }
   private saveEvidence(caseId: string, e: Evidence) {
     const hash = createHash("sha256").update(e.kind + "\0" + e.content).digest("hex");
