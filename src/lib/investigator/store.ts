@@ -1,3 +1,5 @@
+import {EvidenceIndex} from "../search";
+import {segmentEvidence} from "../evidence-index/segments";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
@@ -16,6 +18,7 @@ export function saveOriginal(bytes:Uint8Array) {
 }
 export class Store {
   db: DatabaseSync;
+  index:EvidenceIndex;
   constructor(public directory = dataDir()) {
     mkdirSync(join(directory, "objects"), { recursive: true });
     this.db = new DatabaseSync(join(directory, "cases.sqlite"));
@@ -28,8 +31,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT, at TEXT, body TEXT);
       CREATE TABLE IF NOT EXISTS reports(task_id TEXT, revision INTEGER, body TEXT, PRIMARY KEY(task_id,revision));`);
     this.migrate();
+    this.index=new EvidenceIndex(this.db);
   }
-  private migrate(){this.transaction(()=>{
+  private migrate(){const version=Number(this.db.prepare("PRAGMA user_version").get()!.user_version);if(version>2)throw new Error("数据库版本高于当前应用");if(version===2)return;this.transaction(()=>{
     const cols=new Set((this.db.prepare("PRAGMA table_info(tasks)").all() as {name:string}[]).map(x=>x.name));
     for(const name of ["revision","lease_epoch","active_ms","lifetime_active_ms"])if(!cols.has(name))this.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
     this.db.exec("CREATE TABLE IF NOT EXISTS task_snapshots(id TEXT PRIMARY KEY,body TEXT NOT NULL);CREATE TABLE IF NOT EXISTS task_revisions(task_id TEXT,revision INTEGER,body TEXT,PRIMARY KEY(task_id,revision));");
@@ -67,6 +71,7 @@ export class Store {
     const saved={...e,version};if(last?.hash===hash)return saved;
     try { writeFileSync(join(this.directory, "objects", hash), e.content, { flag: "wx" }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
     this.db.prepare("INSERT INTO evidence VALUES(?,?,?,?,?)").run(caseId, e.id, version, hash, JSON.stringify(saved));
+    this.index.replaceVersion({caseId,evidenceId:e.id,version},segmentEvidence({caseId,evidenceId:e.id,version,kind:e.kind,content:e.content,source:e.source}));
     return saved;
   }
   snapshot(caseId: string): Segment[] {
@@ -87,6 +92,12 @@ export class Store {
   }
   tasks(caseId:string):Task[]{return (this.db.prepare("SELECT id FROM tasks WHERE case_id=? ORDER BY rowid DESC").all(caseId) as {id:string}[]).map(r=>this.task(r.id));}
   taskSummaries(caseId:string){return (this.db.prepare("SELECT id,state,revision,body FROM tasks WHERE case_id=? ORDER BY rowid DESC").all(caseId) as {id:string;state:string;revision:number;body:string}[]).map(r=>{const t=JSON.parse(r.body);return {id:r.id,state:r.state,revision:r.revision,goal:t.goal,step:t.step,mode:t.mode,stale:t.stale,modelCalls:t.modelCalls,toolCalls:t.toolCalls,snapshotId:t.snapshotId};});}
+  private indexVersion(caseId:string,evidenceId:string,version:number){
+    const exists=this.db.prepare("SELECT 1 FROM tt_search_segments WHERE case_id=? AND evidence_id=? AND version=? LIMIT 1").get(caseId,evidenceId,version);if(exists)return;
+    const {evidence}=this.evidenceVersion(caseId,evidenceId,version);this.index.replaceVersion({caseId,evidenceId,version},segmentEvidence({caseId,evidenceId,version,kind:evidence.kind,content:evidence.content,source:evidence.source}));
+  }
+  searchCase(caseId:string,query:string,offset=0){const c=this.case(caseId);const grants=c.evidence.map(e=>({caseId,evidenceId:e.id,version:(e as Evidence&{version?:number}).version||Number((this.db.prepare("SELECT MAX(version) version FROM evidence WHERE case_id=? AND id=?").get(caseId,e.id) as {version:number}).version)}));for(const g of grants)this.indexVersion(g.caseId,g.evidenceId,g.version);return this.index.search(query,{authorizedVersions:grants,topK:20,offset,expand:true});}
+  searchSnapshot(t:Task,query:string){const grants=[...new Map(t.snapshot.map(s=>[s.evidenceId+"@"+s.version,{caseId:t.caseId,evidenceId:s.evidenceId,version:s.version}])).values()];for(const g of grants)this.indexVersion(g.caseId,g.evidenceId,g.version);const result=this.index.search(query,{authorizedVersions:grants,topK:100,expand:true});const matches=[...new Map(result.hits.flatMap(h=>t.snapshot.filter(s=>h.evidenceId===s.evidenceId&&h.version===s.version&&h.start<s.end&&h.end>s.start)).map(s=>[s.id,s])).values()];return {...result,matches};}
   evidenceVersion(caseId:string,id:string,version:number){this.case(caseId);if(!Number.isSafeInteger(version)||version<1)throw new Error("无效版本");const r=this.db.prepare("SELECT version,hash,body FROM evidence WHERE case_id=? AND id=? AND version=?").get(caseId,id,version) as {version:number;hash:string;body:string}|undefined;if(!r)throw new Error("版本不存在");return {evidence:{...JSON.parse(r.body),version:r.version},version:r.version,hash:r.hash};}
   evidenceVersions(caseId:string,id:string){this.case(caseId);return this.db.prepare("SELECT version,hash FROM evidence WHERE case_id=? AND id=? ORDER BY version").all(caseId,id);}
   createTask(caseId:string, input:unknown): Task {

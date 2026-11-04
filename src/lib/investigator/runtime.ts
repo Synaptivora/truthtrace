@@ -186,13 +186,14 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
             if(call.name==="case_overview") output={goal:current.goal,artifacts:current.artifacts,decisions:current.decisions};
             else if(call.name==="search_evidence"||call.name==="list_evidence") {
               const {query,person,from,to,offset}=querySchema.parse(args);
-              const matches=current.snapshot.filter(s=>{
+              const indexed=call.name==="search_evidence"&&query?store.searchSnapshot(current,query):null;
+              const matches=(indexed?indexed.matches:current.snapshot).filter(s=>{
                 if(call.name==="list_evidence")return true;
-                if(s.kind==="image"||(query&&!s.content.toLowerCase().includes(query.toLowerCase()))||(person&&!s.content.includes(person)))return false;
+                if(s.kind==="image"||(!indexed&&query&&!s.content.toLowerCase().includes(query.toLowerCase()))||(person&&!s.content.includes(person)))return false;
                 if(from||to){const dates=s.content.match(/\d{4}-\d{2}-\d{2}/g)||[];return dates.some(d=>(!from||d>=from)&&(!to||d<=to));}
                 return true;
               });
-              output={total:matches.length,nextOffset:offset+20<matches.length?offset+20:null,note:from||to?"时间筛选只匹配片段里明确写出的日期；无日期材料未匹配，不代表没有相关事件。":"关键词检索不等于完整覆盖",segments:matches.slice(offset,offset+20).map(({content,...s})=>({...s,preview:s.kind==="image"?"图像":content.slice(0,100)}))};
+              output={searchCoverage:indexed?{...indexed.coverage,matchedIndexSegments:indexed.total,unreturnedMatches:Math.max(0,indexed.total-indexed.hits.length)}:undefined,queries:indexed?.queries,total:matches.length,nextOffset:offset+20<matches.length?offset+20:null,note:from||to?"时间筛选只匹配片段里明确写出的日期；无日期材料未匹配，不代表没有相关事件。":"关键词检索不等于完整覆盖",segments:matches.slice(offset,offset+20).map(({content,...s})=>({...s,preview:s.kind==="image"?"图像":content.slice(0,100)}))};
             } else if(call.name==="get_evidence_context") {
               const {segmentId}=readSchema.parse(args),source=current.snapshot.find(s=>s.id===segmentId);
               if(!source||source.kind==="image")throw new Error("请选择文本片段");

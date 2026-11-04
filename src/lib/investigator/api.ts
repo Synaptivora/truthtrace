@@ -10,6 +10,7 @@ export async function handle(request:Request, kind:"cases"|"investigations", pat
   try {
     const [id,resource]=path;
     if(request.method==="GET") {
+      if(kind==="cases"&&id&&resource==="search"){const url=new URL(request.url);return Response.json(store.searchCase(id,url.searchParams.get("q")||"",Number(url.searchParams.get("offset")||0)));}
       if(kind==="cases"&&id&&resource==="evidence"&&path[2]){const version=new URL(request.url).searchParams.get("version");return Response.json(version?store.evidenceVersion(id,path[2],Number(version)):{versions:store.evidenceVersions(id,path[2])});}
       if(kind==="cases"&&id&&resource==="investigations"&&new URL(request.url).searchParams.get("view")==="summary")return Response.json({tasks:store.taskSummaries(id)});
       if(kind==="cases") return Response.json(!id?{cases:store.cases()}:resource==="investigations"?{tasks:store.tasks(id)}:{case:store.case(id)});
