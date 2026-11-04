@@ -15,3 +15,11 @@ TRUTHTRACE_DATA_DIR指定隔离的数据目录，默认.truthtrace。数据库�
 
 ## 发布门槛
 Local候选必须通过单测、类型、lint、生产build、四条浏览器回归、Python安全与离线渠道回归、迁移恢复测试。Team/Public还需多用户身份/案件ACL、独立存储审计及安全评审，当前不具备这些发布资格。有状态source操作尚无CPU硬隔离，不宣称恶意文件沙箱已完成。
+
+## 备份命令
+先停止应用、worker及Python材料服务。现有V2库备份：
+```
+node --import tsx scripts/data-backup.mjs backup SOURCE_DIR NEW_BACKUP_DIR --offline-confirmed
+node --import tsx scripts/data-backup.mjs restore BACKUP_DIR NEW_DATA_DIR --offline-confirmed
+```
+目标必须不存在；恢复验证清单、DB与对象hash，不能覆盖当前运行目录。升级旧版前应停服后完整复制原数据目录（包括WAL/SHM和原件）作为冷备，再首次启动新版本；不要用会自动打开迁移库的V2工具替代升级前冷备。
