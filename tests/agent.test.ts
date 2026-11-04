@@ -81,7 +81,9 @@ describe("provider protocols and credentials", () => {
   });
   it("does not expose configured server credentials", async () => {
     vi.stubEnv("AGENT_PROVIDER", "openai"); vi.stubEnv("AGENT_API_KEY", "never-display-me"); vi.stubEnv("AGENT_MODEL", "fixture");
-    expect(await (await GET()).text()).not.toContain("never-display-me");
+    vi.stubEnv("TRUTHTRACE_MACHINE_TOKEN","t".repeat(64));
+    const response=await GET(new Request("http://localhost:3000/api/agent/connection",{headers:{host:"localhost:3000",authorization:`Bearer ${"t".repeat(64)}`}}));
+    expect(response.status).toBe(200);expect(await response.text()).not.toContain("never-display-me");
   });
   it("converts Anthropic tool use and results", () => {
     const step = parseStep("anthropic", { content: [{ type: "tool_use", id: "a1", name: "read_evidence", input: { id: "E1" } }] });
@@ -116,12 +118,13 @@ describe("chat route", () => {
     expect(AgentRequestSchema.safeParse({ ...input, evidence: [input.evidence[0], input.evidence[0]] }).success).toBe(false);
   });
   it("returns framed status and result events", async () => {
-    const response = await POST(new Request("http://localhost/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, mode: "demo" }) }));
+    vi.stubEnv("TRUTHTRACE_MACHINE_TOKEN","t".repeat(64));
+    const response = await POST(new Request("http://localhost:3000/api/agent/chat", { method: "POST", headers: { host:"localhost:3000", authorization:`Bearer ${"t".repeat(64)}`, "Content-Type": "application/json" }, body: JSON.stringify({ ...input, mode: "demo" }) }));
     const events = (await response.text()).trim().split("\n").map(s => JSON.parse(s));
     expect(events[0].type).toBe("status"); expect(events.at(-1).type).toBe("result");
   });
   it("rejects cross-site requests", async () => {
-    const response = await POST(new Request("http://localhost/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://unrelated.example" }, body: JSON.stringify(input) }));
-    expect(response.status).toBe(400);
+    const response = await POST(new Request("http://localhost:3000/api/agent/chat", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://unrelated.example" }, body: JSON.stringify(input) }));
+    expect(response.status).toBe(403);
   });
 });

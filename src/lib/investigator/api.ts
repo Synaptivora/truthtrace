@@ -24,7 +24,7 @@ export async function handle(request:Request, kind:"cases"|"investigations", pat
       }
       return Response.json({task});
     }
-    const body=await readJson(request,100*1024*1024);
+    const body=await readJson(request,kind==="cases"?25*1024*1024:2*1024*1024);
     if(kind==="cases") {
       if(!id) return Response.json({case:store.saveCase(body)});
       if(resource==="investigations") {
