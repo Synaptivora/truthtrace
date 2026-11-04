@@ -1383,6 +1383,7 @@ def build_evidence(filename, mime, data: bytes, origin: str | None = None,
 import hmac
 import threading
 import secrets
+import socket
 
 REQUEST_LIMIT = min(int(os.environ.get("TRUTHTRACE_REQUEST_LIMIT", 25 * 1024 * 1024)), 25 * 1024 * 1024)
 REQUEST_SLOTS = threading.BoundedSemaphore(4)
@@ -1880,7 +1881,10 @@ def main():
         raise SystemExit("Ingestion requires loopback binding")
     if not os.environ.get("TRUTHTRACE_INGESTION_TOKEN"):
         raise SystemExit("TRUTHTRACE_INGESTION_TOKEN is required")
-    server = ThreadingHTTPServer((os.environ.get("INGESTION_HOST", "127.0.0.1"), port), Handler)
+    host = os.environ.get("INGESTION_HOST", "127.0.0.1")
+    class LoopbackHTTPServer(ThreadingHTTPServer):
+        address_family = socket.AF_INET6 if host == "::1" else socket.AF_INET
+    server = LoopbackHTTPServer((host, port), Handler)
     print(f"[A 解析服务] 已启动: http://localhost:{port}")
     print(f"  POST /parse      单文件 → 单条 evidence (B 当前兼容)")
     print(f"  POST /parse_chat 聊天JSON → evidences[] bundle (需 B 改 parser 支持数组)")

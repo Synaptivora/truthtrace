@@ -47,10 +47,15 @@ if (process.env.SYNAPSE_AUTO_SETUP === '1' && process.env.SYNAPSE_SKIP_AUTO_SETU
 }
 
 const envLocal = loadEnvLocal();
+const configuredToken = envLocal.TRUTHTRACE_INGESTION_TOKEN || process.env.TRUTHTRACE_INGESTION_TOKEN;
+if (configuredToken && configuredToken.length < 32) {
+  console.error('[local] TRUTHTRACE_INGESTION_TOKEN 至少需要 32 个字符，请修正后重新启动。');
+  process.exit(1);
+}
 const INGESTION_URL = envLocal.INGESTION_SERVICE_URL
   || process.env.INGESTION_SERVICE_URL || 'http://127.0.0.1:8000';
-const INGESTION_PORT = new URL(INGESTION_URL).port || '8000';
-const env = { ...process.env, ...envLocal, INGESTION_SERVICE_URL: INGESTION_URL, TRUTHTRACE_INGESTION_TOKEN: envLocal.TRUTHTRACE_INGESTION_TOKEN || process.env.TRUTHTRACE_INGESTION_TOKEN || randomBytes(32).toString("hex"), TRUTHTRACE_LOCAL_BOOTSTRAP: "1", TRUTHTRACE_SESSION_SECRET: randomBytes(32).toString("hex") };
+const INGESTION_PORT = new URL(INGESTION_URL).port || '80';
+const env = { ...process.env, ...envLocal, INGESTION_SERVICE_URL: INGESTION_URL, INGESTION_HOST: new URL(INGESTION_URL).hostname.replace(/^\[|\]$/g, ""), TRUTHTRACE_INGESTION_TOKEN: envLocal.TRUTHTRACE_INGESTION_TOKEN || process.env.TRUTHTRACE_INGESTION_TOKEN || randomBytes(32).toString("hex"), TRUTHTRACE_LOCAL_BOOTSTRAP: "1", TRUTHTRACE_SESSION_SECRET: randomBytes(32).toString("hex") };
 
 // 全局 npm 装不上时，setup.mjs 会把工具装到 ~/.synapse/tools/npm；
 // 把它的 .bin 加进 PATH，Python 的 shutil.which("dws") 才能找到。
