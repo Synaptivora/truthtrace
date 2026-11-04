@@ -21,7 +21,7 @@ describe("investigator durability and provenance",()=>{
     store.saveCase({caseId:"case1",evidence:[evidence,{...evidence,id:"e2",content:"尚未到账"}],analysis});
     const next=store.action(t.id,"revise");
     expect(next.revision).toBe(2);expect(next.snapshot).toHaveLength(2);expect(next.state).toBe("queued");
-    expect(store.owned(t.id,"old-worker",task=>{task.step=8;})).toBe(false);
+    expect(store.owned({...store.lease(t),owner:"old-worker"},task=>{task.step=8;})).toBe(false);
   });
   it("detects live worker heartbeats and expires stale workers",()=>{
     expect(store.workerReady()).toBe(false);store.workerHeartbeat("worker");expect(store.workerReady()).toBe(true);
@@ -73,9 +73,9 @@ describe("investigator durability and provenance",()=>{
     store.saveCase({caseId:"case1",evidence:[{...evidence,content:"周六退款"}],analysis});expect(store.snapshot("case1")[0].version).toBe(2);expect(store.task(t.id).snapshot[0].content).toContain("周五");
   });
   it("rejects late results after pause and allows lease recovery",()=>{
-    const t=create();store.claim("first");store.action(t.id,"pause");expect(store.owned(t.id,"first",v=>{v.step=8;})).toBe(false);
+    const t=create();store.claim("first");store.action(t.id,"pause");expect(store.owned({...store.lease(t),owner:"first"},v=>{v.step=8;})).toBe(false);
     store.action(t.id,"resume");const resumed=store.claim("second")!;expect(resumed.step).toBe(0);
-    resumed.lease=Date.now()-1;store.saveTask(resumed);expect(store.claim("third")?.owner).toBe("third");expect(store.owned(t.id,"second",()=>{})).toBe(false);
+    resumed.lease=Date.now()-1;store.saveTask(resumed);expect(store.claim("third")?.owner).toBe("third");expect(store.owned({...store.lease(t),owner:"second"},()=>{})).toBe(false);
   });
   it("requires alternative explanations for conflicts",()=>{
     const t=create();t.step=5;t.artifacts=[ArtifactSchema.parse({summary:"",claims:[{id:"a",content:"a",kind:"statement",refs:[{evidenceId:"e1",version:1,segmentId:"x",quote:"a"}]},{id:"b",content:"b",kind:"statement",refs:[{evidenceId:"e1",version:1,segmentId:"x",quote:"b"}]}]})];

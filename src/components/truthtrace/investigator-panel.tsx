@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { Settings } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { skillNames, skillLabels, investigationModes, suggestMode, taskStages, type InvestigationMode, type Task } from "@/lib/investigator/contracts";
 import type { CaseAnalysis } from "./api-client";
 import type { ChannelId } from "./channel-import";
@@ -12,12 +12,13 @@ const states:Record<string,string>={queued:"正在准备调查",running:"正在�
 type Props={context:CaseAnalysis;initialGoal?:string;routedMode?:InvestigationMode;onGoalChange:(goal:string)=>void;onConfigure:(goal:string)=>void;onSupplement:(channel?:ChannelId,goal?:string)=>void};
 export function InvestigatorPanel({context,initialGoal,routedMode,onGoalChange,onConfigure,onSupplement}:Props) {
   const [goal,setGoal]=useState(initialGoal||context.goal||""),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+  const latestSummary=useRef("");
   const [task,setTask]=useState<Task|null>(null),[source,setSource]=useState<string|null>(null);
   const [allowImages,setAllowImages]=useState(false),[mode,setMode]=useState<InvestigationMode|"auto">("auto");
   const [health,setHealth]=useState<{model:boolean;worker:boolean}|null>(null);
   const [reasons,setReasons]=useState<Record<string,string>>({});
   useEffect(()=>{const timer=setTimeout(()=>{if(initialGoal)setGoal(initialGoal);},0);return()=>clearTimeout(timer);},[initialGoal]);
-  useEffect(()=>{let active=true;const refresh=async()=>{try{const [d,h]=await Promise.all([call(`/api/cases/${context.caseId}/investigations`),call("/api/assistant/service")]);if(active){setTask(d.tasks[0]||null);setHealth(h);}}catch(e){if(active)setError((e as Error).message);}};void refresh();const timer=setInterval(refresh,2000);return()=>{active=false;clearInterval(timer);};},[context.caseId]);
+  useEffect(()=>{let active=true;const refresh=async()=>{try{const [d,h]=await Promise.all([call(`/api/cases/${context.caseId}/investigations?view=summary`),call("/api/assistant/service")]);if(active){const summary=d.tasks[0];const signature=JSON.stringify(summary);if(signature!==latestSummary.current){const detail=summary?await call(`/api/investigations/${summary.id}`):null;if(active){setTask(detail?.task||null);latestSummary.current=signature;}}setHealth(h);}}catch(e){if(active)setError((e as Error).message);}};void refresh();const timer=setInterval(refresh,2000);return()=>{active=false;clearInterval(timer);};},[context.caseId]);
   const selectedMode=mode==="auto"?(goal===initialGoal&&routedMode?routedMode:suggestMode(goal)):mode;
   const stages=taskStages(task?.mode),completed=task?stages.filter(stage=>stage<task.step).length:0;
   const gaps=task?[...new Set([...(task.collectionNotes||[]),...task.artifacts.flatMap(a=>a.gaps)])]:[];
@@ -37,7 +38,7 @@ export function InvestigatorPanel({context,initialGoal,routedMode,onGoalChange,o
       <p className="investigator-route">{investigationModes[selectedMode].description} 只使用本案已选材料。</p>
       <details><summary>调整调查范围（可选）</summary><label>调查方式<select aria-label="调查方式" value={mode} onChange={e=>setMode(e.target.value as InvestigationMode|"auto")}><option value="auto">由助手安排</option>{Object.entries(investigationModes).map(([key,value])=><option key={key} value={key}>{value.label}</option>)}</select></label><p>当前调查方式不会因修改此选项而改变；新方式用于下一次调查。</p><label><input type="checkbox" checked={allowImages} onChange={e=>setAllowImages(e.target.checked)}/>允许模型查看原图（需视觉能力）</label></details>
       <p className="investigator-privacy">开始后，选定材料会发送给调查模型。你可以随时停止；没有选中的会话不会自动加入。</p>
-      <div className="investigator-actions"><button onClick={()=>onSupplement(undefined,goal)}>补充文件或截图</button><button onClick={()=>onSupplement("dingtalk",goal)}>选择钉钉会话</button><button onClick={()=>onSupplement("wechat",goal)}>选择微信会话</button></div>
+      {task?.stale&&<p role="status">材料已更新，本报告基于旧版本。请重新核查后使用结论。</p>}<div className="investigator-actions"><button onClick={()=>onSupplement(undefined,goal)}>补充文件或截图</button><button onClick={()=>onSupplement("dingtalk",goal)}>选择钉钉会话</button><button onClick={()=>onSupplement("wechat",goal)}>选择微信会话</button></div>
       <button disabled={busy||!goal.trim()||!context.evidence.length||!!task&&!["completed","cancelled"].includes(task.state)} onClick={()=>void start()}>{busy?"正在准备…":"开始核查"}</button>
     </details>
     {health&&!health.model&&<div role="status"><p>还差模型连接，目标和材料已保留。</p><button onClick={()=>onConfigure(goal)}>连接模型并继续</button></div>}
@@ -51,7 +52,7 @@ export function InvestigatorPanel({context,initialGoal,routedMode,onGoalChange,o
       {claims.length>0&&<h3>依据与原文</h3>}{claims.map(c=><article key={c.id}><strong>{c.content}</strong><p>{terms[c.kind]} · {terms[checks.find(v=>v.claimId===c.id)?.status||""]||"尚未独立核查"}</p><p>{checks.find(v=>v.claimId===c.id)?.reason}</p>{c.refs.map((ref,i)=><button key={i} onClick={()=>setSource(ref.segmentId)}>查看原文：{ref.quote.slice(0,60)}</button>)}</article>)}
       {([["people","人物候选"],["relationships","关系"],["events","时间线"],["commitments","承诺"],["conflicts","需要对照的说法"]] as const).filter(([key])=>task.artifacts.some(a=>a[key].length)).map(([key,title])=><details key={key}><summary>{title}</summary>{task.artifacts.flatMap(a=>a[key]).map(f=><article key={f.id}><strong>{f.content}</strong><p>{f.time}</p>{f.alternatives.map((v,i)=><p key={i}>其他解释：{v}</p>)}</article>)}</details>)}
       <details><summary>查看处理过程与覆盖范围</summary><p>{completed}/{stages.length} · {task.model?.name}</p><ol className="investigator-steps">{stages.map(i=><li key={skillNames[i]}>{i<task.step?"✓ ":i===task.step?"→ ":""}{skillLabels[i]}</li>)}</ol><p>共 {task.snapshot.length} 个片段，读取 {task.reads.length} 个。未检出不等于不存在。</p></details>
-      <div className="investigator-actions">{["queued","running","waiting_user"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("pause")}>先停一下</button>}{["paused","failed","waiting_user"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("resume")}>继续核查</button>}{task.state!=="running"&&<button disabled={busy} onClick={()=>void act("revise")}>按调整后的目标重新核查</button>}{!["completed","cancelled"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("cancel")}>结束本次调查</button>}{finished&&<a href={`/api/investigations/${task.id}/report`}>保存报告</a>}</div>
+      {task?.stale&&<p role="status">材料已更新，本报告基于旧版本。请重新核查后使用结论。</p>}<div className="investigator-actions">{["queued","running","waiting_user"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("pause")}>先停一下</button>}{["paused","failed","waiting_user"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("resume")}>继续核查</button>}{task.state!=="running"&&<button disabled={busy} onClick={()=>void act("revise")}>按调整后的目标重新核查</button>}{!["completed","cancelled"].includes(task.state)&&<button disabled={busy} onClick={()=>void act("cancel")}>结束本次调查</button>}{finished&&<a href={`/api/investigations/${task.id}/report`}>保存报告</a>}</div>
       {source&&<article><button onClick={()=>setSource(null)}>关闭原文</button>{task.snapshot.find(s=>s.id===source)?.kind==="image"?<Image src={task.snapshot.find(s=>s.id===source)!.content} alt="引用原图" width={600} height={400} unoptimized style={{width:"100%",height:"auto"}}/>:<pre>{task.snapshot.find(s=>s.id===source)?.content}</pre>}</article>}
     </>}
   </section>;
