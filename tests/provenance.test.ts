@@ -13,3 +13,13 @@ describe("versioned provenance",()=>{
  it("does not certify image quotes as exact text",()=>{const image={...evidence,kind:"image" as const,content:"data:image/png;base64,aA=="};const imageContext={...context,evidence:[image],segments:[{...context.segments[0],kind:"image",content:image.content,end:image.content.length}]};const ref=createEvidenceRef(image,0,image.content.length,imageContext);expect(ref.citationValidation).toBe("visual_unverified");expect(ref.provenance?.verificationMethod).toBe("visual_unverified");});
  it("retains multiple read ranges and reports unread coverage",()=>{const long={...evidence,content:"a".repeat(12001)};const ctx={...context,evidence:[long],segments:[{...context.segments[0],content:long.content,end:long.content.length}]};const tools=makeTools({mode:"demo",allowImages:false,evidence:[long],messages:[{role:"user",content:"read"}]},ctx);tools.execute("read_evidence",{id:"E1",offset:0});tools.execute("read_evidence",{id:"E1",offset:6000});expect(tools.seen.get("E1")?.refs).toHaveLength(2);expect(tools.coverage().truncated).toBe(true);tools.execute("read_evidence",{id:"E1",offset:12000});expect(tools.coverage().truncated).toBe(false);});
 });
+it("searches Chinese alternatives within trusted versions without marking hits read",()=>{
+ const e={...evidence,content:"昨天说退钱，今天仍未入账。"};const ctx={...context,evidence:[e],segments:[{...context.segments[0],content:e.content,end:e.content.length}]};
+ const tools=makeTools({mode:"demo",allowImages:false,evidence:[e],messages:[{role:"user",content:"退款"}]},ctx);
+ const found=tools.execute("search_evidence",{query:"退款"}) as {hits:{id:string;offset:number}[];queries:string[]};expect(found.hits).toHaveLength(1);expect(found.queries).toContain("退钱");expect(tools.seen.size).toBe(0);
+ tools.execute("read_evidence",{id:found.hits[0].id,offset:found.hits[0].offset});expect(tools.seen.get("E1")?.refs?.[0].provenance?.version).toBe(2);
+ expect(()=>tools.execute("case_overview",{caseId:"foreign"})).toThrow();
+});
+it("keeps temporary search identities out of persistent citations",()=>{
+ const tools=makeTools({mode:"demo",allowImages:false,evidence:[{...evidence,content:"退钱"}],messages:[{role:"user",content:"退款"}]});const found=tools.execute("search_evidence",{query:"退款"}) as {hits:{id:string;offset:number}[]};expect(found.hits).toHaveLength(1);tools.execute("read_evidence",{id:found.hits[0].id,offset:found.hits[0].offset});expect(tools.seen.get("E1")?.refs?.[0].provenance).toBeUndefined();
+});
