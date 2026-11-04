@@ -8,3 +8,5 @@ describe("model destination security",()=>{
 });
 
 it("does not expose caller abort reasons",async()=>{const controller=new AbortController();controller.abort(new Error("private-secret"));await expect(secureModelRequest(new URL("https://example.com"),{},"",controller.signal)).rejects.toMatchObject({code:"MODEL_CANCELLED",retryable:false});});
+
+it("connects an explicitly approved hostname with pinned DNS",async()=>{const server=createServer((_req,res)=>res.end("ok"));await new Promise<void>(r=>server.listen(0,"::",r));const origin=`http://localhost:${(server.address() as {port:number}).port}`;const previous=process.env.TRUTHTRACE_MODEL_PRIVATE_ORIGINS;process.env.TRUTHTRACE_MODEL_PRIVATE_ORIGINS=origin;try{const response=await secureModelRequest(new URL(origin),{},"{}",new AbortController().signal);expect(await response.text()).toBe("ok");}finally{if(previous===undefined)delete process.env.TRUTHTRACE_MODEL_PRIVATE_ORIGINS;else process.env.TRUTHTRACE_MODEL_PRIVATE_ORIGINS=previous;await new Promise<void>(r=>server.close(()=>r()));}});
