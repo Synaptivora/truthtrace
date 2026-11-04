@@ -1,3 +1,4 @@
+import { markdownText, markdownItem, markdownQuote, markdownProse } from "@/lib/markdown";
 import type { AnalysisResult, EvidenceRef, TimelineEvent } from "@/lib/contracts";
 import type { CaseAnalysis } from "./api-client";
 
@@ -25,8 +26,21 @@ export function referenceLocation(ref:EvidenceRef):string {
 }
 export function analysisReport(result: CaseAnalysis, notes: Record<string, string>): string {
   const { analysis, evidence } = result;
-  const sources = (refs: EvidenceRef[]) => uniqueRefs(refs).map(ref => `  - [${ref.evidenceId}] ${evidence.find(e => e.id === ref.evidenceId)?.name || "来源缺失"}：${ref.quote}（${referenceLocation(ref)}）`);
-  return ["# " + (result.caseName || analysis.caseTitle), "", ({ mock: "模拟分析 · 不代表真实识别结论。", rule: "规则整理 · 依据材料统计，未经模型推理。", model: "模型整理 · 以下疑点尚待人工核实。" }[analysis.analysisMode]), `生成时间：${analysis.generatedAt}`, "", "## 事件概况", analysis.summary, "", "## 涉及人物与主体", ...analysis.people.flatMap(p => [`- ${p.name} / ${p.role}：${p.summary}`, ...sources(p.evidenceRefs)]), "", "## 事件时间线", ...mergeTimeline(analysis.events).flatMap(e => [`- ${e.timeLabel} ${e.title}：${e.description}`, ...sources(e.evidenceRefs)]), "", "## 待核查问题", ...analysis.contradictions.flatMap(c => [`- 待核实：${c.title}。${c.description}`, ...sources(c.evidenceRefs)]), "", "## 补充材料", ...analysis.evidenceGaps.flatMap(g => [`- ${g.title}：${g.suggestedEvidence}`, ...sources(g.evidenceRefs)]), "", "## 核查备注（人工填写，未经模型重分析）", ...Object.entries(notes).filter(([, note]) => note.trim()).map(([id, note]) => `- [${id}] ${note}`), "", "## 原始材料索引", ...evidence.map(e => `- [${e.id}] ${e.name} / ${e.source || e.kind} · 版本 ${e.version??"未记录"} · 原件 ${e.originalHash??"未记录"}`)].join("\n");
+  const sources = (refs: EvidenceRef[]) => uniqueRefs(refs).flatMap(ref => [
+    "", markdownQuote(ref.quote), "",
+    markdownText(`来源：[${ref.evidenceId}] ${evidence.find(e => e.id === ref.evidenceId)?.name || "来源缺失"}`),
+    "", markdownText(referenceLocation(ref)), "",
+  ]);
+  const section = (title:string, lines:string[]) => ["", `## ${title}`, "", ...(lines.length?lines:["暂无记录。"]), ""];
+  return ["# " + markdownText(result.caseName || analysis.caseTitle).replace(/\n/g," "), "", ({ mock: "模拟分析 · 不代表真实识别结论。", rule: "规则整理 · 依据材料统计，未经模型推理。", model: "模型整理 · 以下疑点尚待人工核实。" }[analysis.analysisMode]), "", `生成时间：${markdownText(analysis.generatedAt)}`,
+    ...section("事件概况",[markdownProse(analysis.summary)]),
+    ...section("涉及人物与主体", analysis.people.flatMap(p => [markdownItem(`${p.name} / ${p.role}：${p.summary}`), ...sources(p.evidenceRefs)])),
+    ...section("事件时间线", mergeTimeline(analysis.events).flatMap(e => [markdownItem(`${e.timeLabel} ${e.title}：${e.description}`), ...sources(e.evidenceRefs)])),
+    ...section("待核查问题", analysis.contradictions.flatMap(c => [markdownItem(`待核实：${c.title}。${c.description}`), ...sources(c.evidenceRefs)])),
+    ...section("补充材料", analysis.evidenceGaps.flatMap(g => [markdownItem(`${g.title}：${g.suggestedEvidence}`), ...sources(g.evidenceRefs)])),
+    ...section("核查备注（人工填写，未经模型重分析）", Object.entries(notes).filter(([, note]) => note.trim()).map(([id,note]) => markdownItem(`[${id}] ${note}`))),
+    ...section("原始材料索引", evidence.map(e => markdownItem(`[${e.id}] ${e.name} / ${e.source || e.kind} · 版本 ${e.version??"未记录"} · 原件 ${e.originalHash??"未记录"}`))),
+  ].join("\n").trim()+"\n";
 }
 export const materialKinds: Record<string, string> = { text: "文本", chat: "聊天记录", image: "图片", pdf: "PDF 文件" };
 export type { AnalysisResult };

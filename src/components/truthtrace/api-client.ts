@@ -1,3 +1,4 @@
+import { materialRequestBody } from "@/lib/request-limits";
 import { AnalysisResultSchema, EvidenceSchema } from "@/lib/contracts";
 import type { AnalysisResult, Evidence } from "@/lib/contracts";
 
@@ -82,7 +83,7 @@ export async function analyzeFiles(files: File[], signal: AbortSignal, onParsed:
   const kept = combined.slice(0, MAX_ANALYZE_EVIDENCE);
   const analysisReply = await readReply(await fetch("/api/analyze", {
     method: "POST", signal, headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ evidence: kept,allowFallback:true }),
+    body: materialRequestBody({ evidence: kept,allowFallback:true }),
   }), "分析失败，请稍后重试。");
   const result = AnalysisResultSchema.safeParse(analysisReply.analysis);
   if (!result.success) throw new Error("分析结果未通过格式校验，请重试。");

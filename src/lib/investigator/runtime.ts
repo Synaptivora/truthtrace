@@ -1,3 +1,4 @@
+import { markdownText, markdownItem, markdownQuote, markdownProse } from "../markdown";
 import {ensurePlan,requestReplan,finishPlanStage,ReplanSchema} from "./plan";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -92,27 +93,27 @@ export function report(t:Task): string {
   const artifacts=t.artifacts;
   const claims=artifacts.flatMap(a=>a.claims);
   const checks=artifacts.flatMap(a=>a.checks);
-  const lines=[`# 调查报告草稿`, `调查目标：${t.goal}`, `调查方式：${investigationModes[t.mode || "deep"].label}`, `版本：${t.revision} · 模型辅助分析 · 最终判断由用户作出`, `模型：${t.model?`${t.model.provider} / ${t.model.name}`:"未调用"}`, "\n## 主张与核查"];
+  const lines=[`# 调查报告草稿`, `调查目标：${markdownText(t.goal)}`, `调查方式：${investigationModes[t.mode || "deep"].label}`, `版本：${t.revision} · 模型辅助分析 · 最终判断由用户作出`, `模型：${t.model?`${t.model.provider} / ${t.model.name}`:"未调用"}`, "\n## 主张与核查"];
   if(t.executionOutcome)lines.push(`执行结果：${t.executionOutcome}${t.error?"；"+t.error:""}`);
   if(t.executionPlan)lines.push(`重规划：${t.executionPlan.replans}/${t.executionPlan.maxReplans}；仍待复核结果：${t.executionPlan.staleResultIds.join(", ")||"无"}`);
   const answer=artifacts.findLast(a=>a.answer)?.answer;
-  if(answer)lines.push("\n## 对目标的回答",answer.text,`依据：[${answer.claimIds.join(", ")}]`);
+  if(answer)lines.push("\n## 对目标的回答",markdownProse(answer.text),`依据：[${answer.claimIds.join(", ")}]`);
   for(const c of claims) {
     const check=t.executionPlan?.staleResultIds.includes(c.id)?undefined:checks.findLast(x=>x.claimId===c.id);
-    lines.push(`\n### ${c.id} ${c.content}`,`类型：${c.kind}；核查：${check?.status||"insufficient"}`,check?.reason||"尚未核查");
-    for(const ref of c.refs) {const s=t.snapshot.find(s=>s.id===ref.segmentId)!;lines.push(`> ${ref.quote.replace(/\n/g,"\n> ")}`,`来源：${s.name} · ${ref.evidenceId} v${ref.version} · ${s.kind==="image"?"整张图像，识别引文待人工核对":`字符 ${s.start}–${s.end}`} · ${ref.segmentId}`);}
+    lines.push(`\n### ${markdownText(c.id)} ${markdownText(c.content).replace(/\n/g," ")}`,`类型：${c.kind}；核查：${check?.status||"insufficient"}`,markdownText(check?.reason||"尚未核查"));
+    for(const ref of c.refs) {const s=t.snapshot.find(s=>s.id===ref.segmentId)!;lines.push(markdownQuote(ref.quote),`来源：${markdownText(s.name)} · ${ref.evidenceId} v${ref.version} · ${s.kind==="image"?"整张图像，识别引文待人工核对":`字符 ${s.start}–${s.end}`} · ${ref.segmentId}`);}
   }
   for(const [key,title] of [["people","人物候选"],["relationships","关系"],["events","时间线"],["commitments","承诺"],["conflicts","潜在矛盾"]] as const) {
     lines.push(`\n## ${title}`);
-    for(const f of artifacts.flatMap(a=>a[key])) {const check=t.executionPlan?.staleResultIds.includes(f.id)?undefined:artifacts.flatMap(a=>a.findingChecks||[]).findLast(c=>c.findingId===f.id);lines.push(`- ${f.content} ${f.time||""} [${f.claimIds.join(", ")}]${f.alternatives.length?`；其他解释：${f.alternatives.join("；")}`:""}；核查：${check?.status||"insufficient"} ${check?.reason||"尚未核查"}`);}
+    for(const f of artifacts.flatMap(a=>a[key])) {const check=t.executionPlan?.staleResultIds.includes(f.id)?undefined:artifacts.flatMap(a=>a.findingChecks||[]).findLast(c=>c.findingId===f.id);lines.push(`- ${markdownText(f.content).replace(/\n/g,"\n  ")} ${f.time||""} [${f.claimIds.join(", ")}]${f.alternatives.length?`；其他解释：${markdownText(f.alternatives.join("；"))}`:""}；核查：${check?.status||"insufficient"} ${markdownText(check?.reason||"尚未核查")}`);}
   }
-  lines.push("\n## 证据缺口与覆盖限制",...(t.collectionNotes||[]).map(g=>`- ${g}`),...artifacts.flatMap(a=>a.gaps).map(g=>`- ${g}`));
+  lines.push("\n## 证据缺口与覆盖限制",...(t.collectionNotes||[]).map(markdownItem),...artifacts.flatMap(a=>a.gaps).map(markdownItem));
   const unread=t.snapshot.filter(s=>!t.reads.includes(s.id));
   lines.push(`- 共 ${t.snapshot.length} 个片段，读取 ${t.reads.length} 个；未读取 ${unread.length} 个。未检出不等于不存在。`);
-  for(const s of unread) lines.push(`- 未核查：${s.name} (${s.id})${s.kind==="image"?"：当前调查引文校验仅支持文本，请人工核对图片":""}`);
-  lines.push("\n## 用户决定（独立于证据支持状态）",...t.decisions.map(d=>`- ${d.id}：${d.value}；理由：${d.reason}；${d.at}`));
-  for(const d of artifacts.flatMap(a=>a.decisions).filter(d=>!t.decisions.some(v=>v.id===d.id))) lines.push(`- 待决定：${d.question} [${d.claimIds.join(", ")}]`);
-  return lines.join("\n");
+  for(const s of unread) lines.push(`- 未核查：${markdownText(s.name)} (${s.id})${s.kind==="image"?"：当前调查引文校验仅支持文本，请人工核对图片":""}`);
+  lines.push("\n## 用户决定（独立于证据支持状态）",...t.decisions.map(d=>`- ${d.id}：${markdownText(d.value)}；理由：${markdownText(d.reason).replace(/\n/g,"\n  ")}；${d.at}`));
+  for(const d of artifacts.flatMap(a=>a.decisions).filter(d=>!t.decisions.some(v=>v.id===d.id))) lines.push(`- 待决定：${markdownText(d.question)} [${d.claimIds.join(", ")}]`);
+  return lines.join("\n\n").trim()+"\n";
 }
 
 export async function runTask(store:Store, initial:Task, invoke= modelStep) {

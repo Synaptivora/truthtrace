@@ -1,0 +1,61 @@
+/* Shared reading scale: retain the case-room palette, use clear UI typography. */
+:root { --sans:"Segoe UI Variable Text","Segoe UI","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif; --serif:var(--sans); --reading-size:16px; }
+:root[data-agent-text="large"] { --reading-size:18px; }
+body { font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+button,input,select,textarea { font-family:var(--sans); }
+.entry-shell { max-width:1520px; }
+.entry-home-heading h1,.entry-title h1,.local-case-heading h1 { font-size:36px; font-weight:600; letter-spacing:-.02em; }
+.entry-home-heading p:not(.entry-eyebrow),.entry-title>p:last-child,.local-case-heading p:not(.entry-eyebrow),.empty-case-surface>p { font-size:16px; }
+.entry-primary,.entry-secondary { min-height:46px; font-size:15px; }
+.entry-breadcrumb,.entry-private,.entry-case-count { font-size:13px; }
+.entry-footer { font-size:12px; }
+.contract-topbar { flex-wrap:wrap; padding:16px 0; gap:18px; }
+.contract-topbar h1 { font-size:28px; font-weight:600; letter-spacing:0; }
+.contract-topbar>div>small,.contract-brand small { font-size:11px; }
+.contract-mode,.contract-outline,.contract-investigation>header nav button { font-size:13px; }
+.contract-outline { min-height:40px; }
+.contract-catalog>button strong,.contract-material-card strong { font-size:15px; line-height:1.6; }
+.contract-catalog>button small,.contract-catalog>button em,.contract-material-card span { font-size:12px; }
+.contract-summary,.contract-finding p,.contract-records p { font-size:var(--reading-size); line-height:1.85; }
+.contract-catalog h2,.contract-findings h2 { font-size:22px; font-weight:600; }
+.contract-content { min-width:0; }
+.contract-source-dialog { width:min(1040px,calc(100vw - 48px)); }
+.evidence-content,.evidence-raw { font:var(--reading-size)/1.9 var(--sans); overflow-wrap:anywhere; }
+.evidence-raw { white-space:pre-wrap; padding:20px; }
+.evidence-document { min-width:0; padding:20px 28px 32px; }
+.evidence-document nav { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:24px; }
+.evidence-document nav button { padding:9px 14px; border:1px solid #ab875a66; border-radius:8px; background:transparent; color:inherit; font-size:14px; }
+.evidence-document nav button[aria-pressed="true"] { background:#b38a4829; border-color:#b38a48; }
+.evidence-document nav small { font-size:12px; opacity:.75; }
+.transcript-bubble { font-size:var(--reading-size); line-height:1.85; }
+.transcript-message header { font-size:13px; }
+.agent-panel { --agent-copy-size:var(--reading-size); --agent-small-size:13px; width:540px; font-family:var(--sans); }
+:root[data-agent-text="large"] .agent-panel { --agent-copy-size:18px; --agent-small-size:14px; }
+.agent-view-connection,.agent-view-investigation { width:680px; }
+.agent-message { padding:18px; }
+.agent-panel .agent-message>p { font-size:var(--reading-size); line-height:1.85; }
+.agent-panel .investigator-result { font-size:var(--reading-size); }
+.ci-dialog { width:min(1240px,calc(100vw - 48px)); font-family:var(--sans); font-size:15px; }
+.ci-card p,.ci-hint,.ci-note,.ci-steps span,.ci-title small { font-size:13px; }
+.ci-conv-title,.ci-message,.ci-bubble { font-size:15px; line-height:1.8; }
+.ci-error { font-size:14px; line-height:1.75; }
+.markdown-content { font-size:var(--reading-size); line-height:1.85; white-space:normal; overflow-wrap:anywhere; min-width:0; }
+.markdown-content :first-child { margin-top:0; }
+.markdown-content :last-child { margin-bottom:0; }
+.markdown-content p { font:inherit; white-space:normal; margin:0 0 1em; }
+.markdown-content h1,.markdown-content h2,.markdown-content h3,.markdown-content h4 { font-family:var(--sans); line-height:1.5; font-weight:650; letter-spacing:0; margin:1.4em 0 .65em; }
+.markdown-content h1 { font-size:1.65em; }.markdown-content h2 { font-size:1.35em; }.markdown-content h3 { font-size:1.15em; }
+.markdown-content ul,.markdown-content ol { padding-left:1.6em; margin:.75em 0 1em; }
+.markdown-content li { margin:.35em 0; }.markdown-content li>p { margin:.35em 0; }
+.markdown-content blockquote { margin:1em 0; padding:12px 18px; border-left:3px solid #b4915f; background:#ad8b5510; }
+.markdown-content blockquote p { margin:0; }
+.markdown-content table { display:block; width:max-content; max-width:100%; overflow-x:auto; border-collapse:collapse; font-size:.9em; margin:1em 0; }
+.markdown-content th,.markdown-content td { padding:10px 14px; border:1px solid #ad8b5540; text-align:left; min-width:90px; }
+.markdown-content th { background:#ad8b5518; font-weight:650; }
+.markdown-content pre { white-space:pre; overflow:auto; padding:16px; background:#ad8b5512; border:1px solid #ad8b5530; border-radius:8px; line-height:1.6; }
+.markdown-content code { font-family:Consolas,"SFMono-Regular",monospace; font-size:.88em; }
+.markdown-content :not(pre)>code { padding:2px 5px; background:#ad8b5515; border-radius:4px; }
+.markdown-content hr { border:0; border-top:1px solid #ad8b5540; margin:24px 0; }
+.md-link-target,.md-image-note { font-size:.9em; opacity:.8; overflow-wrap:anywhere; }
+@media(min-width:1450px){.contract-columns{grid-template-columns:250px minmax(0,1fr) 340px;gap:20px}.contract-shell{padding-inline:32px}}
+@media(max-width:700px){.entry-shell{padding-inline:20px}.entry-home-heading h1,.entry-title h1{font-size:28px}.contract-topbar h1{font-size:23px}.contract-source-dialog{width:calc(100vw - 16px)}.evidence-document{padding:16px}.agent-panel,.agent-view-connection,.agent-view-investigation{width:auto;left:8px;right:8px;max-width:calc(100vw - 16px)}.ci-dialog{width:calc(100vw - 16px)}.markdown-content{font-size:var(--reading-size)}}
