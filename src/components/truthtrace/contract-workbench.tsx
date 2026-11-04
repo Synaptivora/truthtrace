@@ -87,7 +87,27 @@ function CaseWorkbench({ result, onHome, onUpdate }: WorkbenchProps) {
   useEffect(()=>{
     const locate=(event:Event)=>{const d=(event as CustomEvent).detail;if(!d||d.caseId!==result.caseId||!Number.isInteger(d.version)||!Number.isInteger(d.start)||!Number.isInteger(d.end)||typeof d.quote!=="string")return;void openReference({evidenceId:d.evidenceId,quote:d.quote,provenance:{schemaVersion:2,caseId:d.caseId,evidenceId:d.evidenceId,version:d.version,segmentId:d.segmentId||null,originalHash:null,parserVersion:null,locator:{type:"text_range",start:d.start,end:d.end},verificationMethod:"exact_text"}});};
     const controller=new AbortController();sourceRequest.current?.abort();sourceRequest.current=controller;
-    try{const raw=sessionStorage.getItem("truthtrace.pending-locator.v1");if(raw){const d=JSON.parse(raw);if(d.caseId===result.caseId){sessionStorage.removeItem("truthtrace.pending-locator.v1");if(Number.isInteger(d.version)&&d.version>0&&Number.isInteger(d.start)&&Number.isInteger(d.end)&&d.start>=0&&d.end>d.start)void fetch(`/api/cases/${encodeURIComponent(d.caseId)}/evidence/${encodeURIComponent(d.evidenceId)}?version=${d.version}`,{signal:controller.signal}).then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{const item=EvidenceSchema.parse(data.evidence);if(item.id!==d.evidenceId||item.version!==d.version||d.end>item.content.length)throw Error();if(controller.signal.aborted||sourceRequest.current!==controller)return;setHistorical(item);setCitation({evidenceId:d.evidenceId,quote:item.content.slice(d.start,d.end),provenance:{schemaVersion:2,caseId:d.caseId,evidenceId:d.evidenceId,version:d.version,segmentId:d.segmentId||null,originalHash:item.originalHash||null,parserVersion:item.parserVersion||null,locator:{type:"text_range",start:d.start,end:d.end},verificationMethod:"exact_text"}});}).catch(()=>{if(!controller.signal.aborted)setSourceError("搜索引用对应的历史版本暂时不可用，请返回搜索页重试。");});}}}catch{sessionStorage.removeItem("truthtrace.pending-locator.v1");}
+    async function restoreLocator() {
+      await Promise.resolve();
+      if(controller.signal.aborted)return;
+      try {
+        const raw=sessionStorage.getItem("truthtrace.pending-locator.v1");
+        if(!raw)return;
+        const d=JSON.parse(raw);
+        if(d.caseId!==result.caseId)return;
+        sessionStorage.removeItem("truthtrace.pending-locator.v1");
+        if(!Number.isInteger(d.version)||d.version<1||!Number.isInteger(d.start)||!Number.isInteger(d.end)||d.start<0||d.end<=d.start)throw Error();
+        setSourceLoading(true);setSourceError("");
+        const response=await fetch(`/api/cases/${encodeURIComponent(d.caseId)}/evidence/${encodeURIComponent(d.evidenceId)}?version=${d.version}`,{signal:controller.signal});
+        if(!response.ok)throw Error();
+        const data=await response.json();const item=EvidenceSchema.parse(data.evidence);
+        if(item.id!==d.evidenceId||item.version!==d.version||d.end>item.content.length)throw Error();
+        if(controller.signal.aborted||sourceRequest.current!==controller)return;
+        setHistorical(item);setCitation({evidenceId:d.evidenceId,quote:item.content.slice(d.start,d.end),provenance:{schemaVersion:2,caseId:d.caseId,evidenceId:d.evidenceId,version:d.version,segmentId:d.segmentId||null,originalHash:item.originalHash||null,parserVersion:item.parserVersion||null,locator:{type:"text_range",start:d.start,end:d.end},verificationMethod:"exact_text"}});
+      }catch{if(!controller.signal.aborted)setSourceError("搜索引用对应的历史版本暂时不可用，请返回搜索页重试。");}
+      finally{if(!controller.signal.aborted&&sourceRequest.current===controller)setSourceLoading(false);}
+    }
+    void restoreLocator();
     window.addEventListener("truthtrace:locate-evidence",locate);window.dispatchEvent(new CustomEvent("truthtrace:workbench-ready",{detail:{caseId:result.caseId}}));
     return ()=>{controller.abort();sourceRequest.current?.abort();window.removeEventListener("truthtrace:locate-evidence",locate);};
   },[result.caseId,openReference]);
