@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import Image from "next/image";
 import type { Evidence } from "@/lib/contracts";
 
@@ -113,13 +113,19 @@ export function EvidenceContent({
   item,
   all,
   onOpen,
+  highlight,
 }: {
   item: Evidence;
   all: Evidence[];
   onOpen?: (id: string) => void;
+  highlight?: {start:number;end:number;quote:string};
 }) {
+  const mark=useRef<HTMLElement>(null);
+  useEffect(()=>{mark.current?.scrollIntoView({block:"center"});},[highlight]);
+  const valid=highlight&&highlight.start>=0&&highlight.end<=item.content.length&&item.content.slice(highlight.start,highlight.end)===highlight.quote;
   const chat = item.kind === "chat";
   const blocks = chat ? parseChatTranscript(item.content) : [];
+  if(valid&&highlight)return <pre className="evidence-content" style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{item.content.slice(0,highlight.start)}<mark ref={mark}>{item.content.slice(highlight.start,highlight.end)}</mark>{item.content.slice(highlight.end)}</pre>;
   if (blocks.some(block => block.type === "message")) {
     return <div className="evidence-content evidence-chat-transcript" aria-label="聊天原文">
       {blocks.map((block, index) => {
