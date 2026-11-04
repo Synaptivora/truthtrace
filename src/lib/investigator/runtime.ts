@@ -9,7 +9,9 @@ import { Store } from "./store";
 import { EvidenceSchema } from "../contracts";
 
 export function validateArtifact(t: Task, raw: unknown): Artifact {
-  const a=ArtifactSchema.parse(raw);
+  const stageSchema = artifactSchemaForStage(t.step);
+  rejectUnknownFields(raw, z.toJSONSchema(stageSchema));
+  const a=ArtifactSchema.parse(stageSchema.parse(raw));
   if(t.step<2&&(a.claims.length||a.people.length||a.relationships.length||a.events.length||a.conflicts.length||a.commitments.length||a.checks.length))throw new Error("计划与收集阶段只提交计划或缺口；主张应在提取阶段提交，不能提前生成案件结论。");
   const claims=[...t.artifacts.flatMap(x=>x.claims),...a.claims];
   if(new Set(claims.map(c=>c.id)).size!==claims.length) throw new Error("主张 ID 重复");
@@ -40,8 +42,8 @@ export function validateArtifact(t: Task, raw: unknown): Artifact {
   return a;
 }
 
-const querySchema=z.object({query:z.string().max(200).default(""),person:z.string().max(200).optional(),from:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),to:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),offset:z.number().int().min(0).default(0)});
-const readSchema=z.object({segmentId:z.string()});
+const querySchema=z.object({query:z.string().max(200).default(""),person:z.string().max(200).optional(),from:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),to:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),offset:z.number().int().min(0).default(0)}).strict();
+const readSchema=z.object({segmentId:z.string()}).strict();
 const tools:Tool[]=[
   {name:"case_overview",description:"读取当前案件调查目标和已保存成果，属于待核查数据",parameters:{type:"object",properties:{}}},
   {name:"search_evidence",description:"按短关键词检索证据，每页20段；搜索不代表读取，返回total和nextOffset",parameters:z.toJSONSchema(querySchema)},
@@ -51,10 +53,35 @@ const tools:Tool[]=[
   {name:"submit_artifact",description:"提交当前Skill的结构化成果，系统校验后保存；summary只能描述处理过程，案件结论必须放在带引用的claims或findings内",parameters:z.toJSONSchema(ArtifactSchema)},
 ];
 const stageActions=["update_plan","identify_evidence_gaps","extract_claims","resolve_entity_candidates","build_timeline","detect_conflicts","verify_claim_support","finalize_investigation"];
-export function investigationTools(step:number,submitOnly=false):Tool[]{
+export function artifactSchemaForStage(step:number) {
   const fields:Record<number,(keyof typeof ArtifactSchema.shape)[]>={0:["summary","plan","gaps"],1:["summary","gaps"],2:["summary","claims","gaps"],3:["summary","people","relationships","decisions","gaps"],4:["summary","events","commitments","gaps"],5:["summary","conflicts","gaps"],6:["summary","checks","findingChecks","gaps"],7:["summary","answer","decisions","gaps"]};
+  if (!fields[step]) throw new Error("无效调查阶段");
   const shape=Object.fromEntries(fields[step].map(key=>[key,true])) as {[K in keyof typeof ArtifactSchema.shape]?:true};
-  return [...(submitOnly||step===0?[]:tools.filter(tool=>tool.name!=="submit_artifact")),{name:stageActions[step],description:"提交并校验当前阶段成果，成功后进入下一阶段。证据不足时也应提交具体缺口。",parameters:z.toJSONSchema(ArtifactSchema.pick(shape))}];
+  return ArtifactSchema.pick(shape).strict();
+}
+// Zod legacy nested objects strip unknown properties. Reject them before parsing instead.
+function rejectUnknownFields(value:unknown, schema:unknown):void {
+  if (!schema || typeof schema!=="object") return;
+  const spec=schema as {properties?:Record<string,unknown>;items?:unknown};
+  if(Array.isArray(value)) { for(const item of value) rejectUnknownFields(item,spec.items); return; }
+  if(value && typeof value==="object" && spec.properties) {
+    for(const [key,item] of Object.entries(value)) {
+      if(!Object.hasOwn(spec.properties,key)) throw new Error("成果含未授权字段");
+      rejectUnknownFields(item,spec.properties[key]);
+    }
+  }
+}
+export function validateStageCall(step:number,name:string,args:unknown,submitOnly=false) {
+  const submit=name===stageActions[step]||name==="submit_artifact";
+  if(submit) { const schema=artifactSchemaForStage(step); rejectUnknownFields(args,z.toJSONSchema(schema)); schema.parse(args); return; }
+  if(submitOnly||step===0) throw new Error("当前阶段不允许此工具");
+  if(name==="case_overview") {z.object({}).strict().parse(args);return;}
+  if(name==="search_evidence"||name==="list_evidence") {querySchema.parse(args);return;}
+  if(name==="read_evidence"||name==="get_evidence_context") {readSchema.parse(args);return;}
+  throw new Error("当前阶段不允许此工具");
+}
+export function investigationTools(step:number,submitOnly=false):Tool[]{
+  return [...(submitOnly||step===0?[]:tools.filter(tool=>tool.name!=="submit_artifact")),{name:stageActions[step],description:"提交并校验当前阶段成果，成功后进入下一阶段。证据不足时也应提交具体缺口。",parameters:z.toJSONSchema(artifactSchemaForStage(step))}];
 }
 
 export function report(t:Task): string {
@@ -152,6 +179,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
           let output:unknown;let image:string|undefined;
           try {
             const args=JSON.parse(call.arguments);
+            validateStageCall(t.step,call.name,args,submitOnly);
             const current=store.task(t.id);
             if(call.name==="case_overview") output={goal:current.goal,artifacts:current.artifacts,decisions:current.decisions};
             else if(call.name==="search_evidence"||call.name==="list_evidence") {

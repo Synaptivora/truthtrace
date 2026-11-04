@@ -86,7 +86,7 @@ describe("investigator durability and provenance",()=>{
     const invoke:typeof modelStep=async()=>{
       const current=store.task(t.id),s=current.snapshot[0];
       if(current.step===2&&!current.reads.length)return {text:"",raw:undefined,calls:[{id:"read",name:"read_evidence",arguments:JSON.stringify({segmentId:s.id})}]};
-      const a=ArtifactSchema.parse({summary:"阶段完成",...(current.step===0?{plan:["查找退款承诺并核实履行"]}:{}),...(current.step===2?{claims:[{id:"c1",content:"小王说周五退款",kind:"statement",refs:[{evidenceId:s.evidenceId,version:s.version,segmentId:s.id,quote:"周五退款"}]}]}:{}),...(current.step===6?{checks:[{claimId:"c1",status:"supported",reason:"原文支持承诺存在，不证明已经履行"}]}:{}),gaps:["缺少实际到账记录"]});
+      const a={summary:"阶段完成",...(current.step===0?{plan:["查找退款承诺并核实履行"]}:{}),...(current.step===2?{claims:[{id:"c1",content:"小王说周五退款",kind:"statement",refs:[{evidenceId:s.evidenceId,version:s.version,segmentId:s.id,quote:"周五退款"}]}]}:{}),...(current.step===6?{checks:[{claimId:"c1",status:"supported",reason:"原文支持承诺存在，不证明已经履行"}]}:{}),gaps:["缺少实际到账记录"]};
       return {text:"",raw:undefined,calls:[{id:`step${current.step}`,name:"submit_artifact",arguments:JSON.stringify(a)}]};
     };
     await runTask(store,leased,invoke);const done=store.task(t.id);expect(done.error).toBe("");expect(done.state).toBe("completed");expect(done.step).toBe(8);
