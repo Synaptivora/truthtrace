@@ -34,7 +34,7 @@ try{
   // Goal-bearing cases open the assistant; close it to exercise the case's analysis action.
   const close=page.getByRole('button',{name:'关闭助手',exact:true});if(await close.isVisible())await close.click();
   await page.getByRole('button',{name:'用模型分析已有材料',exact:true}).click();await page.getByRole('alert').filter({hasText:'余额不足'}).waitFor();
-  let saved=(await (await fetch(base+'/api/cases/reliability')).json()).case;assert.equal(saved.analysis.analysisMode,'rule');assert.deepEqual(saved.evidence,evidence);
+  let saved=(await (await fetch(base+'/api/cases/reliability')).json()).case;assert.equal(saved.analysis.analysisMode,'rule');assert.deepEqual(saved.evidence,evidence.map(item=>({...item,version:1})));
   failing=false;await page.getByRole('button',{name:'用模型分析已有材料',exact:true}).click();await page.locator('.contract-mode').getByText('模型分析',{exact:true}).waitFor();
   saved=(await (await fetch(base+'/api/cases/reliability')).json()).case;assert.equal(saved.reviewNotes.chat,'保留我的备注');assert.equal(saved.goal,'了解源码要求');assert.equal(saved.analysis.relationships.length,1);
   await page.getByText('互动清单 · 1',{exact:true}).click();await page.locator('.graph-toolbar details button').click();await page.getByLabel('关系依据',{exact:true}).getByText(evidence[0].content.split('\n')[1],{exact:true}).waitFor();
