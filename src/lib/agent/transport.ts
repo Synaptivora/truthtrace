@@ -111,7 +111,7 @@ export async function secureModelRequest(url: URL, headers: Record<string,string
   const selected=list[0];
   return new Promise((resolve,reject)=>{
     const request=url.protocol==="https:"?httpsRequest:httpRequest;
-    const req=request(url,{method:"POST",agent:false,family:selected.family,headers,signal:deadline,lookup:(_host,_options,callback)=>callback(null,selected.address,selected.family)},res=>{
+    const req=request(url,{method:"POST",agent:false,family:selected.family,headers,signal:deadline,lookup:(_host,options,callback)=>{if(options.all)callback(null,[selected]);else callback(null,selected.address,selected.family);}},res=>{
       const chunks:Buffer[]=[];let size=0;
       res.on("data",(chunk:Buffer)=>{size+=chunk.length;if(size>8*1024*1024){req.destroy();reject(new ModelTransportError("MODEL_SIZE","模型响应超过大小限制"));}else chunks.push(chunk);});
       res.on("error",()=>reject(new ModelTransportError("MODEL_NETWORK","模型响应中断",true)));
