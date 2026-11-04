@@ -204,6 +204,8 @@ def _thumbnail(media: str, max_bytes: int = 2 * 1024 * 1024) -> str | None:
         return None
 
 
+from .handle_files import HandleFiles, guarded_handles
+
 class SourceService:
     """渠道连接状态机 + sync 编排。
 
@@ -211,6 +213,7 @@ class SourceService:
     """
 
     def __init__(self):
+        self._handle_files = HandleFiles()
         self._lock = threading.Lock()          # 保护 _state / _busy / _store
         self._busy: dict[str, bool] = {}
         self._state: dict[str, dict] = {}
@@ -506,15 +509,22 @@ class SourceService:
         """
         if not data:
             return None
-        os.makedirs(_HANDLE_ROOT, exist_ok=True)
         token = uuid.uuid4().hex[:16]
-        ext = os.path.splitext(filename or "")[1].lower() or ".json"
-        path = os.path.join(_HANDLE_ROOT, token + ext)
-        with open(path, "wb") as f:
-            f.write(data)
+        path = self._handle_files.save(data, filename)
         with self._lock:
+            for old, stored in list(self._handles.items()):
+                if self._handle_files.owned(stored) and not os.path.exists(stored):
+                    self._handles.pop(old, None)
             self._handles[token] = path
         return token
+
+    def discard_upload(self, handle):
+        with self._lock:
+            path = self._handles.get(handle)
+            if not path or not self._handle_files.owned(path):
+                return
+            self._handles.pop(handle, None)
+        self._handle_files.remove(path)
 
     def _register_path(self, path: str) -> str:
         """把服务器上已有的导出文件登记成 handle（直读模式先用它落地快照）。"""
@@ -555,6 +565,7 @@ class SourceService:
             self._loaded_key[sid] = key
         return backend, None, 200
 
+    @guarded_handles
     def conversations(self, raw_source: str | None, handle: str | None = None,
                       source_data: str | None = None) -> tuple[dict, int]:
         sid = normalize_source(raw_source)
@@ -1266,6 +1277,7 @@ class SourceService:
             cursor = nxt
         return list(got.values()), pages, complete, stop
 
+    @guarded_handles
     def refresh_conversation(self, raw_source: str | None, handle: str | None = None,
                              conversation_id: str | None = None,
                              title: str | None = None,
@@ -1445,6 +1457,7 @@ class SourceService:
                      "earliest": rows[0]["timestamp"], "latest": rows[-1]["timestamp"]},
         }, 200
 
+    @guarded_handles
     def preview(self, raw_source: str | None, handle: str | None = None,
                 source_data: str | None = None, conversation_ids=None,
                 time_start: str | None = None, time_end: str | None = None,
@@ -1486,6 +1499,7 @@ class SourceService:
         return {"source": sid, "time_start": s, "time_end": e,
                 "self": ident, "conversations": out}, 200
 
+    @guarded_handles
     def extract(self, raw_source: str | None, handle: str | None = None,
                 source_data: str | None = None, conversation_ids=None,
                 time_start: str | None = None, time_end: str | None = None,

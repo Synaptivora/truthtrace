@@ -1495,8 +1495,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self._trusted(urlparse(self.path).path.rstrip("/") != "/health"):
             return
         path = urlparse(self.path).path.rstrip("/")
-        if path == "/health":
-            self._send_json({"status": "ok"})
+        if path in ("/health", "/health/auth"):
+            self._send_json({"status": "ok", "authenticated": path == "/health/auth"})
         elif path.startswith("/files/"):
             self._serve_file(path[len("/files/"):])
         # ---- /source/* 必须排在兜底之前：兜底是「200 + 服务说明」而不是 404，
@@ -1715,11 +1715,16 @@ class Handler(BaseHTTPRequestHandler):
                 handle = None
                 if upload and upload[1]:
                     handle = _SOURCE_SVC.save_handle(upload[1], upload[0])
-                obj, code = _SOURCE_SVC.conversations(
-                    payload.get("source"),
-                    handle=payload.get("handle") or handle,
-                    source_data=payload.get("source_data"),
-                )
+                try:
+                    obj, code = _SOURCE_SVC.conversations(
+                        payload.get("source"), handle=handle or payload.get("handle"),
+                        source_data=payload.get("source_data"))
+                    if handle and code >= 400:
+                        _SOURCE_SVC.discard_upload(handle)
+                except BaseException:
+                    if handle:
+                        _SOURCE_SVC.discard_upload(handle)
+                    raise
             elif path == "/source/live":
                 try:
                     lim = int(payload.get("limit", 100))
