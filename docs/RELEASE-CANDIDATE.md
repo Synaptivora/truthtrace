@@ -43,4 +43,16 @@ PR #18–23为第一批；#26以第一批固定基线为base，#27/#28在检索�
 
 详见TESTING.md、tests/tt06-validation.md、tests/tt10-validation.md、evals/README.md及各任务implementation说明。离线生产适配的旧基线70/73、新候选73/73来自阶段非法字段拒绝，语义指标NOT_MEASURED；词汇召回小集8/13→13/13为作者构造词典测试，不是独立语义评估。
 
-最终候选验证SHA、命令及结果将在本文件下方追加。所有浏览器和渠道回归仅使用临时虚构材料与本地脚本模型。
+所有浏览器和渠道回归仅使用临时虚构材料与本地脚本模型。
+
+## 最终验证记录（2026-11-04）
+
+- 核心代码审查基点：4452e9f8d31cfa9caac3e773b524331c8f1e56ba。独立复核确认重规划上下文、预算上限前失效处理、UI最新核查及stale显示三项阻断关闭。
+- npm test：32个测试文件、161项通过。npm run typecheck通过；npm run lint零错误，仅保留channel-import.tsx既有img警告。
+- npm run build：默认Turbopack生产构建通过。集成worktree已移除指向仓库外的node_modules junction限制，早期webpack替代记录不再代表当前状态。
+- Python security_boundary_test.py：13项通过；run_all.py：14组通过。
+- Investigator、Reliability、Journey钉钉/微信、Browser三协议9请求均通过。Reliability旧fixture已在ffce526改为明确断言服务端version:1，不删除版本字段。
+- 持久会话真实浏览器：刷新、编辑、删除、跨案隔离通过。产品真实浏览器：跨案搜索v2高亮、历史v1定位、承诺日期筛选、时间线、HTML/Markdown下载及脚本转义通过；案件工具抽屉也经实际展开验证。
+- eval-fixtures：32案完整性通过；eval-production：38个生产路径案例共73/73检查通过；eval-compare无回退，结果文件绑定上述核心代码SHA。真实模型调用次数为0，语义指标仍为NOT_MEASURED。
+
+候选以truthtrace-local-rc-20261104标签冻结；该标签还包含最终产品样式、测试断言和本验证记录，不新增核心行为。全部独立PR与总集成PR仍待人工审阅，main未合并。上述未解决范围仍保留，不因测试通过变更为已验收。
