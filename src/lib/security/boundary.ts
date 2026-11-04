@@ -6,7 +6,7 @@ import { safeError } from './safe-error';
 export function localSecret(name = 'TRUTHTRACE_SESSION_SECRET'): string {
   const configured = process.env[name];
   if (configured && configured.length >= 32) return configured;
-  const directory = resolve(process.env.TRUTHTRACE_DATA_DIR || '.truthtrace');
+  const directory = resolve(/* turbopackIgnore: true */ process.env.TRUTHTRACE_DATA_DIR || '.truthtrace');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, `${name.toLowerCase()}.secret`);
   try { writeFileSync(path, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 }); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
