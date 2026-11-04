@@ -23,6 +23,14 @@ const image = (name: string): Evidence => ({
 });
 
 describe("EvidenceContent", () => {
+  it("highlights only an exact matching character range",()=>{
+    const item=chat("before QUOTE after");
+    const html=renderToStaticMarkup(createElement(EvidenceContent,{item,all:[item],highlight:{start:7,end:12,quote:"QUOTE"}}));
+    expect(html).toContain("<mark>QUOTE</mark>");
+    const mismatch=renderToStaticMarkup(createElement(EvidenceContent,{item,all:[item],highlight:{start:0,end:5,quote:"QUOTE"}}));
+    expect(mismatch).not.toContain("<mark>");
+  });
+
   it("never guesses a filename prefix",()=>{
     const message=chat("[图片@2026-07-26 09:22:00: receipt 见独立证据]");
     const html=renderToStaticMarkup(createElement(EvidenceContent,{item:message,all:[image("receipt-other.png")]}));

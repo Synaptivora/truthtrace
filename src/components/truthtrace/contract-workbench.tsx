@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Flag, FolderOpen, GitBranch, Clock3, FileText, Maximize, X, Sparkles, Plus, Download, Search } from "lucide-react";
 import { RelationshipGraph } from "../relationship-graph";
 import { Timeline } from "../timeline";
-import type { EvidenceRef } from "@/lib/contracts";
+import { EvidenceSchema, type Evidence, type EvidenceRef } from "@/lib/contracts";
 import { analyzeFiles } from "./api-client";
 import { materialKinds, uniqueRefs } from "./case-view";
 import type { CaseAnalysis } from "./api-client";
@@ -31,6 +31,10 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
   const request = useRef<AbortController | null>(null);
   const [view, setView] = useState<"graph" | "timeline" | "evidence" | "actions" | "commitments">("graph");
   const [selected, setSelected] = useState<string | null>(null);
+  const [historical,setHistorical]=useState<Evidence|null>(null);
+  const [citation,setCitation]=useState<EvidenceRef|null>(null);
+  const sourceRequest=useRef<AbortController|null>(null);
+  useEffect(()=>()=>sourceRequest.current?.abort(),[]);
   const [focused, setFocused] = useState<string[]>([]);
   const [immersive, setImmersive] = useState(false);
   const nativeFullscreen = useRef(false);
@@ -41,7 +45,7 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
     || notice.droppedEvidence || notice.droppedImages || notice.note));
   const dialog = useRef<HTMLDialogElement>(null);
   const shell = useRef<HTMLDivElement>(null);
-  const original = evidence.find(item => item.id === selected);
+  const original = historical || evidence.find(item => item.id === selected);
 
   const finding = analysis.contradictions.find(item => item.id === comparison);
   useEffect(() => () => request.current?.abort(), []);
@@ -63,7 +67,20 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
     }
   }
   function focusSources(refs: EvidenceRef[]) { setView("graph"); setFocused([...new Set(refs.map(ref => ref.evidenceId))]); }
-  const openSource = useCallback((id: string) => { setComparison(null); setSelected(id); }, []);
+  const openSource = useCallback((id: string) => { sourceRequest.current?.abort();setHistorical(null);setCitation(null);setComparison(null); setSelected(id); }, []);
+  async function openReference(ref:EvidenceRef) {
+    sourceRequest.current?.abort();setSelected(null);setHistorical(null);setComparison(null);setCitation(null);
+    if(!ref.provenance){setError("旧引用未记录版本，不能精确定位；引文："+ref.quote);return;}
+    if(ref.provenance.caseId!==result.caseId){setError("引用不属于当前案件");return;}
+    const controller=new AbortController();sourceRequest.current=controller;
+    try{const response=await fetch(`/api/cases/${encodeURIComponent(ref.provenance.caseId)}/evidence/${encodeURIComponent(ref.evidenceId)}?version=${ref.provenance.version}`,{signal:controller.signal});if(!response.ok)throw Error("历史版本不可用");const data=await response.json();const item=EvidenceSchema.parse(data.evidence);if(item.id!==ref.evidenceId||item.version!==ref.provenance.version)throw Error("历史版本不匹配");if(!controller.signal.aborted){setHistorical(item);setCitation(ref);}}
+    catch{if(!controller.signal.aborted)setError("无法打开确切历史版本；保留引文："+ref.quote);}
+  }
+  useEffect(()=>{
+    const locate=(event:Event)=>{const d=(event as CustomEvent).detail;if(!d||d.caseId!==result.caseId||!Number.isInteger(d.version)||!Number.isInteger(d.start)||!Number.isInteger(d.end)||typeof d.quote!=="string")return;void openReference({evidenceId:d.evidenceId,quote:d.quote,provenance:{schemaVersion:2,caseId:d.caseId,evidenceId:d.evidenceId,version:d.version,segmentId:d.segmentId||null,originalHash:null,parserVersion:null,locator:{type:"text_range",start:d.start,end:d.end},verificationMethod:"exact_text"}});};
+    window.addEventListener("truthtrace:locate-evidence",locate);window.dispatchEvent(new CustomEvent("truthtrace:workbench-ready",{detail:{caseId:result.caseId}}));
+    return ()=>window.removeEventListener("truthtrace:locate-evidence",locate);
+  });
   async function supplement(files: File[]) {
     if (!files.length) return;
     const controller = new AbortController(); request.current = controller; setBusy(true); setError("");
@@ -81,7 +98,7 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
     const response=await fetch(`/api/cases/${result.caseId}/analyze`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const data=await response.json();
     if(!response.ok)throw new Error(data.error||"分析未完成");await onUpdate(data.case);setNoticeOpen(true);
   }catch(e){setError((e as Error).message);}finally{setAnalyzing(false);}}
-  const sourceChips = (refs: EvidenceRef[]) => [...new Map(refs.map(ref => [ref.evidenceId, ref])).values()].map((ref, index) => <button type="button" key={index} onClick={() => openSource(ref.evidenceId)} title={ref.quote}>{evidence.find(item => item.id === ref.evidenceId)?.name ?? ref.evidenceId} ↗</button>);
+  const sourceChips = (refs: EvidenceRef[]) => uniqueRefs(refs).map((ref, index) => <button type="button" key={index} onClick={() => void openReference(ref)} title={ref.quote}>{evidence.find(item => item.id === ref.evidenceId)?.name ?? ref.evidenceId} ↗</button>);
 
   return <div ref={shell} className={`contract-shell ${immersive ? "contract-immersive" : ""}`}>
     {reportPreview&&<section role="dialog" aria-modal="true" aria-label="报告预览" style={{position:"fixed",inset:"5%",zIndex:1000,background:"white",padding:16,display:"flex",flexDirection:"column"}}><button onClick={()=>setReportPreview(false)}>关闭报告预览</button><iframe title="报告内容" sandbox="" srcDoc={renderReport(reportDocument(result,notes),"html")} style={{width:"100%",flex:1,border:0}} /></section>}
@@ -119,6 +136,6 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
       </section>
       <aside className="contract-findings"><h2><Flag size={18} />重点发现</h2><p className="contract-summary">{analysis.analysisMode === "mock" ? "仅完成材料登记，尚未连接分析模型。" : analysis.analysisMode === "rule" ? "已完成材料整理；人物关系与疑点需连接分析模型。" : analysis.summary}</p>{analysis.contradictions.map((item, index) => <article key={item.id} className="contract-finding"><button className="contract-finding-title" onClick={() => focusSources(item.evidenceRefs)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong></button><p>{item.description}</p><small>待核实</small><button className="contract-compare" onClick={() => { setSelected(null); setComparison(item.id); }}>对照原文 →</button><div className="contract-sources">{sourceChips(item.evidenceRefs)}</div></article>)}{analysis.contradictions.length === 0 && analysis.analysisMode !== "mock" && <div className="contract-empty"><Sparkles size={23} /><p>当前结果未标出证据差异。</p></div>}</aside>
     </div>
-    <dialog ref={dialog} className="contract-source-dialog" onClose={() => { setSelected(null); setComparison(null); }} onClick={event => { if (event.target === event.currentTarget) { setSelected(null); setComparison(null); } }}><header><span><small>原始材料 · {original?.source || materialKinds[original?.kind || ""] || "证据对照"}</small><h2>{original?.name || finding?.title}</h2></span><button onClick={() => { setSelected(null); setComparison(null); }} aria-label="关闭原文"><X size={21} /></button></header>{finding ? <div className="contract-comparison">{uniqueRefs(finding.evidenceRefs).map((ref, index) => <article key={index}><h3>{evidence.find(e => e.id === ref.evidenceId)?.name || ref.evidenceId}</h3><blockquote>{ref.quote}</blockquote><small>{ref.locator}</small><button onClick={() => openSource(ref.evidenceId)}>查看完整材料 ↗</button></article>)}</div> : original?.kind === "image" ? <Image src={original.content} alt={original.name} width={1000} height={800} unoptimized /> : original ? <EvidenceContent item={original} all={evidence} onOpen={openSource} /> : null}{original && <details className="source-note"><summary>核查备注</summary><label><span className="agent-sr">核查备注</span><textarea value={notes[original.id] || ""} onChange={event => { const next = { ...notes, [original.id]: event.target.value }; setNotes(next); void Promise.resolve(onUpdate({ ...result, reviewNotes: next })).catch(e=>setError(e.message)); }} placeholder="识别有误或尚待核实的内容…" maxLength={8000} /><small>保留本页，随报告导出；原始材料不变。</small></label></details>}</dialog>
+    <dialog ref={dialog} className="contract-source-dialog" onClose={() => { sourceRequest.current?.abort();setSelected(null); setHistorical(null);setCitation(null); setComparison(null); }} onClick={event => { if (event.target === event.currentTarget) { sourceRequest.current?.abort();setSelected(null); setHistorical(null);setCitation(null); setComparison(null); } }}><header><span><small>原始材料 · {original?.source || materialKinds[original?.kind || ""] || "证据对照"}</small><h2>{original?.name || finding?.title}</h2></span><button onClick={() => { sourceRequest.current?.abort();setSelected(null); setHistorical(null);setCitation(null); setComparison(null); }} aria-label="关闭原文"><X size={21} /></button></header>{finding ? <div className="contract-comparison">{uniqueRefs(finding.evidenceRefs).map((ref, index) => <article key={index}><h3>{evidence.find(e => e.id === ref.evidenceId)?.name || ref.evidenceId}</h3><blockquote>{ref.quote}</blockquote><small>{ref.locator}</small><button onClick={() => void openReference(ref)}>查看完整材料 ↗</button></article>)}</div> : original?.kind === "image" ? <Image src={original.content} alt={original.name} width={1000} height={800} unoptimized /> : original ? <EvidenceContent item={original} all={evidence} onOpen={openSource} highlight={citation?.provenance?.locator.type==="text_range"?{...citation.provenance.locator,quote:citation.quote}:undefined} /> : null}{citation&&<p>引用版本 v{citation.provenance?.version} · {citation.provenance?.locator.type==="text_range"?"按原文字符范围定位":"整份材料；未提供精确坐标"}<button onClick={()=>setCitation(null)}>退出高亮</button></p>}{original && <details className="source-note"><summary>核查备注</summary><label><span className="agent-sr">核查备注</span><textarea value={notes[original.id] || ""} onChange={event => { const next = { ...notes, [original.id]: event.target.value }; setNotes(next); void Promise.resolve(onUpdate({ ...result, reviewNotes: next })).catch(e=>setError(e.message)); }} placeholder="识别有误或尚待核实的内容…" maxLength={8000} /><small>保留本页，随报告导出；原始材料不变。</small></label></details>}</dialog>
   </div>;
 }
