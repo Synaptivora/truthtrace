@@ -7,6 +7,7 @@ import { effectiveConnection as resolveConnection } from "./connections";
 import { ArtifactSchema, skillNames, taskStages, investigationModes, type Artifact, type Task } from "./contracts";
 import { Store } from "./store";
 import { EvidenceSchema } from "../contracts";
+import { ingestionFetch } from "../ingestion/service";
 
 export function validateArtifact(t: Task, raw: unknown): Artifact {
   const stageSchema = artifactSchemaForStage(t.step);
@@ -127,7 +128,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
     for(let i=initial.collectedSources||0;i<initial.scope.sources.length;i++) {
       const source=initial.scope.sources[i];const base=process.env.INGESTION_SERVICE_URL;
       if(!base)throw new Error("指定渠道未连接解析服务，请配置 INGESTION_SERVICE_URL");
-      const response=await fetch(`${base.replace(/\/$/,"")}/source/extract`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:source.source,handle:source.handle,conversation_ids:source.conversationIds,time_start:source.start,time_end:source.end,max_evidence:200}),signal:AbortSignal.any([abort.signal,AbortSignal.timeout(200000)])});
+      const response=await ingestionFetch(`${base.replace(/\/$/,"")}/source/extract`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:source.source,handle:source.handle,conversation_ids:source.conversationIds,time_start:source.start,time_end:source.end,max_evidence:200}),signal:AbortSignal.any([abort.signal,AbortSignal.timeout(200000)])});
       if(!response.ok)throw new Error(`指定渠道读取失败 HTTP ${response.status}；请在渠道页重新检测授权`);
       const result=await response.json();const evidence=EvidenceSchema.array().parse(result.evidences||[]);
       checkpoint(c=>{
