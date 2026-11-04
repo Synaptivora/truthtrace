@@ -32,12 +32,12 @@ try{
  await openCase('conversation-a');await send('核对A材料','A独立回复');
  const a=await (await api('/api/conversations?caseId=conversation-a')).json();assert.equal(a.turns.length,2);assert.equal(a.turns[1].reply.citations[0].refs[0].provenance.caseId,'conversation-a');
  await page.reload();await page.locator('[data-entry-case="conversation-a"]').click();await page.getByRole('button',{name:'和咪探长聊聊',exact:true}).click();await page.getByRole('button',{name:'对话',exact:true}).click();await page.locator('.agent-message.assistant').filter({hasText:'A独立回复'}).waitFor();
- page.once('dialog',dialog=>dialog.accept('已编辑A问题'));await page.locator('.agent-message.user').first().getByRole('button',{name:'编辑',exact:true}).click();await page.getByText('已编辑A问题',{exact:true}).waitFor();assert.equal(await page.locator('.agent-message.assistant').count(),0);
- await send('再次核对A材料','A独立回复');
+ await page.locator('.agent-message.user').first().getByRole('button',{name:'编辑',exact:true}).click();await page.getByLabel('编辑消息',{exact:true}).fill('已编辑A问题');await page.getByRole('button',{name:'保存修改',exact:true}).click();await page.getByText('已编辑A问题',{exact:true}).waitFor();assert.equal(await page.locator('.agent-message.assistant').count(),0);
+ await send('再次核对A材料','A独立回复');await mkdir('artifacts/conversation',{recursive:true});await page.screenshot({path:'artifacts/conversation/desktop.png'});await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/conversation/mobile.png'});const box=await page.locator('.agent-panel').boundingBox();assert(box.x>=0&&box.x+box.width<=390);assert(await page.getByRole('button',{name:'发送',exact:true}).isVisible());await page.setViewportSize({width:1440,height:1100});
  await openCase('conversation-b');assert.equal(await page.locator('.agent-message').count(),0);await send('核对B材料','B独立回复');assert(!await page.locator('.agent-messages').innerText().then(t=>t.includes('A独立回复')));
  assert.equal((await api(`/api/conversations?caseId=conversation-b&id=${a.id}`)).status,409);
  await openCase('conversation-a');await page.getByText('已编辑A问题',{exact:true}).waitFor();assert(!await page.locator('.agent-messages').innerText().then(t=>t.includes('B独立回复')));
- await page.locator('.agent-message').first().getByRole('button',{name:'删除此条及后续',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.agent-message').length===0);
+ await page.locator('.agent-message').first().getByRole('button',{name:'删除此条及后续',exact:true}).click();await page.getByRole('button',{name:'确认删除',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.agent-message').length===0);
  await openCase('conversation-a');assert.equal(await page.locator('.agent-message').count(),0);
  assert.equal(errors.length,0,errors.join('\n'));await mkdir('artifacts/conversation',{recursive:true});await page.screenshot({path:'artifacts/conversation/empty-after-delete.png'});
  console.log(JSON.stringify({pass:true,kind:'local-scripted-browser-e2e',refresh:true,edit:true,delete:true,crossCaseIsolation:true,realModel:false}));
