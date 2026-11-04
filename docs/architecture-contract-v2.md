@@ -1,5 +1,5 @@
 # TruthTrace V2 架构契约 RFC
-日期：2026-11-04。远端 main 已由 GitHub connector 确认：10202a6fc356abcee8e4d6b485bc58be45298875。原工作区干净，HEAD=6de389a63776ec108031f603bc49c1387a254d59。Git 网络同步未完成，实施冻结；本文是提案，不表示功能已实现。
+日期：2026-11-04。远端 main 已由 GitHub connector 确认：10202a6fc356abcee8e4d6b485bc58be45298875。原工作区干净，HEAD=6de389a63776ec108031f603bc49c1387a254d59。已于本轮通过本机代理同步Git对象，17个工作树均已rebase至目标SHA。TT00批准以下接口作为第一批实施契约；不表示功能已实现。
 
 ## 执行边界
 保留 Interactive runner、Autonomous runtime、材料分析三条路径及三协议、SQLite、Python ingestion。不引入新的 Agent 框架。共享身份/权限、连接、安全错误、引用、预算薄层。
@@ -27,3 +27,6 @@ Budget={maxCalls,maxTokens,maxBytes,deadline,maxReplans,consumed} 持久化；�
 TT00批准schema后TT05/06实施双读、版本化写入和幂等事务迁移。迁移前一致性备份数据库及WAL/SHM、objects/originals和密钥元信息；不在运行中随意复制数据库，不把私人数据带入worktree。失败回滚旧应用及完整备份，禁止破坏性自动降级。
 所有 PR 必须有变更前失败复现、正反测试、迁移/回滚、未验证范围。npm test/typecheck/lint/build及investigator/journey/reliability/browser和Python回归按变更执行，集成候选完整执行。确定性测试、人工gold离线评估、真实模型评估分开报告。
 Local验收：回环、会话、限体积、工具授权、来源与恢复、上传告知。Team额外认证/ACL/审计/隔离/备份恢复。Public额外独立安全审查/配额/恶意文件隔离；未通过不得公开接收敏感材料。
+
+## 第一批接线补充
+Python服务认证使用 TRUTHTRACE_INGESTION_TOKEN 与 Authorization: Bearer；health仅可信回环Host可匿名。浏览器不获取服务密钥。Python无Content-Length返回411，chunked拒绝400，Next转发必须提供确定长度。TT03保持modelStep调用签名，扩展可选usage和安全错误属性。
