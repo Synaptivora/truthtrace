@@ -8,11 +8,11 @@ vi.mock("@/lib/ingestion/service",()=>({ensureIngestion:vi.fn(async()=>{})}));
 import { GET, POST } from "../src/app/api/setup/route";
 import { detect, runSetup } from "../scripts/setup.mjs";
 
-beforeEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); });
+beforeEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); vi.stubEnv("TRUTHTRACE_MACHINE_TOKEN","t".repeat(64)); });
 function request(host = "localhost:3000", extra = {}, body?: string) {
   return new Request(`http://${host}/api/setup`, {
     method: body === undefined ? "GET" : "POST",
-    headers: { host, ...extra }, body,
+    headers: { host, authorization:`Bearer ${"t".repeat(64)}`, ...extra }, body,
   });
 }
 it("rejects remote hosts and cross-origin reads before detection", async () => {
@@ -25,9 +25,9 @@ it("supports IPv6 loopback", async () => {
   expect((await GET(request("[::1]:3000"))).status).toBe(200);
 });
 it("accepts a real loopback Origin when Next internally uses localhost",async()=>{
-  const req=new Request("http://localhost:3000/api/setup",{headers:{host:"127.0.0.1:3000",origin:"http://127.0.0.1:3000"}});
+  const req=new Request("http://localhost:3000/api/setup",{headers:{authorization:`Bearer ${"t".repeat(64)}`,host:"127.0.0.1:3000",origin:"http://127.0.0.1:3000"}});
   expect((await GET(req)).status).toBe(200);
-  expect((await GET(new Request("http://localhost:3000/api/setup",{headers:{host:"127.0.0.1:3000",origin:"http://localhost:3000"}}))).status).toBe(403);
+  expect((await GET(new Request("http://localhost:3000/api/setup",{headers:{authorization:`Bearer ${"t".repeat(64)}`,host:"127.0.0.1:3000",origin:"http://localhost:3000"}}))).status).toBe(403);
 });
 it("disables reads and writes with the configuration switch", async () => {
   vi.stubEnv("SYNAPSE_SETUP_ENABLED", "0");

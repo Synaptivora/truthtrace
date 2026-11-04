@@ -7,7 +7,7 @@ export const maxDuration = 120;
 async function rawPOST(request: Request) {
   let input;
   try { input = AgentRequestSchema.parse(await readJson(request)); }
-  catch { return Response.json({ error: "请求格式无效、材料超过 12 MB 或来源不允许，请检查后重试。" }, { status: 400 }); }
+  catch { return Response.json({ error: "请求格式无效、材料超过 2 MiB 或来源不允许，请检查后重试。" }, { status: 400 }); }
   const stop = new AbortController();
   const signal = AbortSignal.any([request.signal, stop.signal, AbortSignal.timeout(110_000)]);
   const encoder = new TextEncoder();
@@ -15,7 +15,7 @@ async function rawPOST(request: Request) {
     async start(controller) {
       function emit(event: AgentEvent) { if (!stop.signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event) + "\n")); }
       try { const reply = await runAgent(input, signal, text => emit({ type: "status", text })); emit({ type: "result", reply }); }
-      catch (error) { emit({ type: "error", error: signal.aborted ? "请求已取消或超时，请重试。" : error instanceof Error && !(error.name === "ZodError" || error instanceof TypeError) ? error.message : "模型返回格式异常或网络不可达，请检查连接设置。" }); }
+      catch { emit({ type: "error", error: signal.aborted ? "请求已取消或超时，请重试。" : "模型返回格式异常或网络不可达，请检查连接设置。" }); }
       finally { if (!stop.signal.aborted) controller.close(); }
     },
     cancel() { stop.abort(); },

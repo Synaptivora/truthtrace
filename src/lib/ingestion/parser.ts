@@ -134,6 +134,7 @@ async function parseChatRemotely(bundle: ChatBundle, serviceUrl: string): Promis
 
 /** 一个文件 → 一条或多条证据（聊天导出会按会话展开成 chat + 媒体）。 */
 export async function parseEvidenceFile(file: File): Promise<Evidence[]> {
+  if (file.size > 25*1024*1024) throw new Error("Request too large");
   if (file.size === 0) throw new Error(`${file.name} 是空文件`);
 
   const serviceUrl = process.env.INGESTION_SERVICE_URL || (/\.(pdf|json)$/i.test(file.name)?ingestionUrl():undefined);
