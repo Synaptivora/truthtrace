@@ -1,3 +1,4 @@
+import { enforceContextBudget } from "../conversation/context";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { EvidenceIndex } from "../search";
@@ -89,6 +90,7 @@ export async function runAgent(request: AgentRequest, signal: AbortSignal, statu
   for (let round = 0; round < 5; round++) {
     signal.throwIfAborted();
     report(round === 0 ? "正在向模型提问" : "正在结合工具结果回答");
+    enforceContextBudget(messages);
     const reply = await modelStep(config, messages, config.tools ? agentTools : [], signal);
     if (!reply.calls.length) {
       if (!reply.text.trim()) throw new Error("模型返回空回复，请重试或更换模型。");

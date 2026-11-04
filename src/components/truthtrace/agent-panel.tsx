@@ -1,5 +1,7 @@
 "use client";
 
+import type { Conversation } from "@/lib/conversation/store";
+
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { MessageCircle, X, Settings, Send, Square, Trash2, Cable } from "lucide-react";
@@ -144,12 +146,42 @@ export function AgentPanel({ context, onReady, onChannel }: { context: AgentCont
 
 function ChatSession({ onIntent, context, mode, connection, initialTurns, onTurns, initialDraft, onDraft }: { onIntent:(text:string,signal:AbortSignal)=>Promise<boolean>; context: AgentContext | null; mode: Mode; connection: Connection; initialTurns: Turn[]; onTurns: (turns: Turn[]) => void; initialDraft: string; onDraft: (draft: string) => void }) {
   const [turns, setTurns] = useState(initialTurns);
+  const [error, setError] = useState("");
+  const savedCaseId=context?.caseId;
+  const [conversation,setConversation]=useState<Conversation|null>(null);
+  const [conversationOptions,setConversationOptions]=useState<{id:string;updated:number}[]>([]);
+  const [restoring,setRestoring]=useState(!!context?.caseId);
+  useEffect(()=>{
+    if(!savedCaseId)return;
+    const controller=new AbortController();
+    async function load(){
+      try{
+        const response=await fetch(`/api/conversations?caseId=${encodeURIComponent(savedCaseId!)}`,{signal:controller.signal});if(!response.ok)throw Error("会话恢复失败");
+        let saved=await response.json();
+        if(!saved){const created=await fetch("/api/conversations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({caseId:savedCaseId,action:"create"}),signal:controller.signal});if(!created.ok)throw Error("会话创建失败");saved=await created.json();}
+        if(!controller.signal.aborted){setConversation(saved);setTurns(saved.turns);setRestoring(false);}
+      }catch{if(!controller.signal.aborted){setError("会话恢复失败，请重新打开助手后重试。");setRestoring(true);}}
+    }
+    void load();return()=>controller.abort();
+  },[savedCaseId]);
+  useEffect(()=>{if(!context?.caseId)return;const controller=new AbortController();fetch(`/api/conversations?caseId=${encodeURIComponent(context.caseId)}&list=1`,{signal:controller.signal}).then(r=>r.ok?r.json():[]).then(rows=>{if(!controller.signal.aborted)setConversationOptions(rows);}).catch(()=>{});return()=>controller.abort();},[context?.caseId,conversation?.id,conversation?.revision]);
+  async function selectConversation(id:string){if(busy||!context?.caseId)return;try{const response=await fetch(`/api/conversations?caseId=${encodeURIComponent(context.caseId)}&id=${encodeURIComponent(id)}`);if(!response.ok)throw Error("无法读取会话");const next=await response.json();setConversation(next);save(next.turns);}catch(e){setError((e as Error).message);}}
+  async function changeConversation(action:string,index?:number,content?:string){
+    if(!context?.caseId||busy)return;
+    try{
+      const response=await fetch("/api/conversations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({caseId:context.caseId,id:conversation?.id,revision:conversation?.revision,action,index,content})});
+      if(!response.ok)throw Error("会话修改失败，请重新打开助手刷新。");
+      let next=await response.json();
+      if(action==="delete"){const created=await fetch("/api/conversations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({caseId:context.caseId,action:"create"})});if(!created.ok)throw Error("新会话创建失败");next=await created.json();}
+      setConversation(next);save(next.turns);setError("");
+    }catch(e){setError((e as Error).message);}
+  }
+
   const [allowImages, setAllowImages] = useState(false);
   const [draft, updateDraft] = useState(initialDraft);
   function setDraft(value: string) { updateDraft(value); onDraft(value); }
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
   const [source, setSource] = useState<Evidence | null>(null);
   const request = useRef<AbortController | null>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -158,13 +190,13 @@ function ChatSession({ onIntent, context, mode, connection, initialTurns, onTurn
   function save(next: Turn[]) { setTurns(next); onTurns(next); }
   function stop() { request.current?.abort(); setBusy(false); setStatus(""); setError("已停止，问题已保留，可重新发送。"); }
   async function send(question = draft) {
-    if (!question.trim() || busy) return;
+    if (!question.trim() || busy || restoring) return;
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setError(""); setStatus("正在准备对话");
     const history = [...turns, { role: "user" as const, content: question.trim() }].slice(-23);
     try {
       if(await onIntent(question,controller.signal)){setDraft("");return;}
-      const response = await fetch("/api/agent/chat", { method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId:context?.caseId, allowImages, messages: history.map(({ role, content }) => ({ role, content })), mode, ...(mode === "custom" ? { connection } : {}), evidence: context?.caseId ? [] : context?.evidence.map(e => e.kind === "image" && !allowImages ? { ...e, content: "[图片像素未发送给对话助手]" } : e) ?? [], analysis: context?.caseId ? undefined : context?.analysis }) });
+      const response = await fetch("/api/agent/chat", { method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId:context?.caseId,conversationId:conversation?.id,conversationRevision:conversation?.revision, allowImages, messages: history.map(({ role, content }) => ({ role, content })), mode, ...(mode === "custom" ? { connection } : {}), evidence: context?.caseId ? [] : context?.evidence.map(e => e.kind === "image" && !allowImages ? { ...e, content: "[图片像素未发送给对话助手]" } : e) ?? [], analysis: context?.caseId ? undefined : context?.analysis }) });
       if (!response.ok) { const data = await response.json(); throw new Error(data.error || "请求失败"); }
       const reader = response.body?.getReader(); if (!reader) throw new Error("未收到回复流。");
       const decoder = new TextDecoder(); let buffer = ""; let result: AgentReply | undefined;
@@ -184,15 +216,20 @@ function ChatSession({ onIntent, context, mode, connection, initialTurns, onTurn
         consume(buffer + decoder.decode());
       } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
       if (!result) throw new Error("回复连接中断，请重试。");
-      if (!controller.signal.aborted) { save([...history, { role: "assistant", content: result.text, reply: result }]); setDraft(""); }
+      if (!controller.signal.aborted) {
+        if(conversation&&context?.caseId){const updated=await fetch(`/api/conversations?caseId=${encodeURIComponent(context.caseId)}&id=${encodeURIComponent(conversation.id)}`,{signal:controller.signal});if(!updated.ok)throw Error("回复已保存，但会话刷新失败，请重新打开助手");const next=await updated.json();setConversation(next);save(next.turns);}
+        else save([...history, { role: "assistant", content: result.text, reply: result }]);
+        setDraft("");
+      }
     } catch (error) { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "发送失败，请重试。"); }
     finally { if (!controller.signal.aborted) { setBusy(false); setStatus(""); } }
   }
   return <>
-    <div className="agent-scope"><span>{context ? `本案 ${context.evidence.length} 份材料` : "通用对话 · 不读取案件"} · {mode === "demo" ? "本地演示" : mode === "custom" ? connection.model || "未填写模型" : "已保存的模型"}</span><button aria-label="清空当前对话" disabled={busy} onClick={() => { save([]); setError(""); }}><Trash2 size={14} /></button></div>
+    <div className="agent-scope"><span>{context ? `本案 ${context.evidence.length} 份材料` : "通用对话 · 不读取案件"} · {mode === "demo" ? "本地演示" : mode === "custom" ? connection.model || "未填写模型" : "已保存的模型"}</span><button aria-label="清空当前对话" disabled={busy} onClick={() => { if(conversation)void changeConversation("delete");else {save([]);setError("");} }}><Trash2 size={14} /></button></div>
+    {context?.caseId&&<div><small>{restoring?"正在恢复本案会话…":`会话已保存 · ${conversation?.turns.length??0} 条消息`}</small><select aria-label="选择本案会话" disabled={busy||restoring} value={conversation?.id??""} onChange={e=>void selectConversation(e.target.value)}>{conversationOptions.map(c=><option key={c.id} value={c.id}>{new Date(c.updated).toLocaleString()} · {c.id.slice(0,8)}</option>)}</select><button disabled={busy||restoring} onClick={()=>void changeConversation("create")}>新会话</button>{conversation?.summary&&<button disabled={busy} onClick={()=>void changeConversation("clear_summary")}>清空上下文摘要</button>}</div>}
     <div className="agent-messages" role="log" aria-label="对话记录">
       {!turns.length && <div className="agent-welcome"><h3>从一个问题开始。</h3><p>{context ? "输入问题，回复会保留材料来源。" : "先告诉我想查清什么，我会帮你选择材料和下一步。"}</p>{(context ? ["这句话出自哪份材料？"] : ["我想查清退款承诺是否兑现", "我有一张截图想补充"]).map(q => <button key={q} disabled={busy} onClick={() => { setDraft(q); void send(q); }}>{q}</button>)}</div>}
-      {turns.map((turn, index) => <article key={index} className={`agent-message ${turn.role}`}><strong>{turn.role === "user" ? "你" : "咪探长"}</strong><p>{turn.content}</p>{turn.reply && <><small>{turn.reply.mode === "demo" ? "本地演示 · 非模型判断" : `模型回复 · ${turn.reply.model}`}</small>{turn.reply.citations.length > 0 && <div className="agent-citations">{turn.reply.citations.map(c => <button key={c.id} onClick={() => {
+      {turns.map((turn, index) => <article key={index} className={`agent-message ${turn.role}`}><strong>{turn.role === "user" ? "你" : "咪探长"}</strong><p>{turn.content}</p>{conversation&&<span><button disabled={busy} onClick={()=>{const text=window.prompt("编辑消息会移除其后的回答，避免保留过期结论。",turn.content);if(text?.trim())void changeConversation("edit",index,text);}}>编辑</button><button disabled={busy} onClick={()=>void changeConversation("delete_turn",index)}>删除此条及后续</button></span>}{turn.reply && <><small>{turn.reply.mode === "demo" ? "本地演示 · 非模型判断" : `模型回复 · ${turn.reply.model}`}</small>{turn.reply.citations.length > 0 && <div className="agent-citations">{turn.reply.citations.map(c => <button key={c.id} onClick={() => {
         const current=context?.evidence.find(e=>e.id===c.evidenceId);
         const refs=c.refs??[];
         const exact=!!current&&refs.length>0&&refs.every(ref=>!!ref.provenance&&ref.provenance.caseId===context?.caseId&&ref.provenance.version===current.version);
@@ -201,7 +238,7 @@ function ChatSession({ onIntent, context, mode, connection, initialTurns, onTurn
       {busy && <div className="agent-progress" role="status">{status}</div>}<div ref={end} />
     </div>
     {error && <p className="agent-error" role="alert">{error}</p>}
-    <form className="agent-compose" onSubmit={e => { e.preventDefault(); void send(); }}>{context?.evidence.some(e => e.kind === "image") && <label className="agent-vision"><input type="checkbox" checked={allowImages} disabled={busy} onChange={e => setAllowImages(e.target.checked)} />发送原图给视觉模型（需模型支持）</label>}<label className="agent-sr" htmlFor="agent-question">输入问题</label><textarea id="agent-question" value={draft} maxLength={12000} onChange={e => setDraft(e.target.value)} placeholder="和咪探长聊聊…" rows={3} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} /><div><small>Enter 发送 · Shift+Enter 换行</small>{busy ? <button key="stop" type="button" onClick={e => { e.preventDefault(); stop(); }}><Square size={14} />停止</button> : <button key="send" type="submit" disabled={!draft.trim()}><Send size={15} />发送</button>}</div><small>当前对话仅保留在本页。发送后，问题与所选材料会交给当前模型服务；原图仅在勾选视觉选项后发送。</small></form>
+    <form className="agent-compose" onSubmit={e => { e.preventDefault(); void send(); }}>{context?.evidence.some(e => e.kind === "image") && <label className="agent-vision"><input type="checkbox" checked={allowImages} disabled={busy} onChange={e => setAllowImages(e.target.checked)} />发送原图给视觉模型（需模型支持）</label>}<label className="agent-sr" htmlFor="agent-question">输入问题</label><textarea id="agent-question" value={draft} maxLength={12000} onChange={e => setDraft(e.target.value)} placeholder="和咪探长聊聊…" rows={3} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} /><div><small>Enter 发送 · Shift+Enter 换行</small>{busy ? <button key="stop" type="button" onClick={e => { e.preventDefault(); stop(); }}><Square size={14} />停止</button> : <button key="send" type="submit" disabled={!draft.trim()||restoring}><Send size={15} />发送</button>}</div><small>已保存案件的对话保存在本机，可编辑或删除；未保存材料的对话仅保留在本页。发送后，问题与所选材料会交给当前模型服务；原图仅在勾选视觉选项后发送。</small></form>
     {source && <section className="agent-source" aria-label="引用原文"><header><strong>{source.name}</strong><button onClick={() => setSource(null)} aria-label="关闭引用原文"><X size={18} /></button></header>{source.kind === "image" ? <Image src={source.content} alt={source.name} width={800} height={600} unoptimized style={{width:"100%",height:"auto"}} /> : <pre>{source.content}</pre>}</section>}
   </>;
 }
