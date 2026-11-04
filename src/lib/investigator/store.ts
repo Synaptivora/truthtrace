@@ -135,9 +135,9 @@ export class Store {
       if(action==="pause" && ["running","queued","waiting_user"].includes(t.state)) t.state="paused";
       else if(action==="cancel" && t.state!=="completed") t.state="cancelled";
       else if(["resume","retry"].includes(action) && ["paused","failed","waiting_user"].includes(t.state)) { t.state="queued"; t.error=""; }
-      else if(action==="revise") { if(this.tasks(t.caseId).some(other=>other.id!==t.id&&["queued","running","waiting_user","paused"].includes(other.state)))throw new Error("本案已有其他正在进行的调查"); t.stale=undefined;t.goal=goal?.trim()||t.goal; t.snapshot=this.snapshot(t.caseId); t.artifacts=[]; t.reads=[]; t.step=0; t.revision++; t.modelCalls=0;t.toolCalls=0;t.activeMs=0;t.collectedSources=0;t.collectionNotes=[];t.error="";t.state="queued"; }
+      else if(action==="revise") { if(this.tasks(t.caseId).some(other=>other.id!==t.id&&["queued","running","waiting_user","paused"].includes(other.state)))throw new Error("本案已有其他正在进行的调查"); t.stale=undefined;t.executionPlan=undefined;t.executionOutcome=undefined;t.goal=goal?.trim()||t.goal; t.snapshot=this.snapshot(t.caseId); t.artifacts=[]; t.reads=[]; t.step=0; t.revision++; t.modelCalls=0;t.toolCalls=0;t.activeMs=0;t.collectedSources=0;t.collectionNotes=[];t.error="";t.state="queued"; }
       else throw new Error("当前状态不支持此操作");
-      t.owner=""; t.lease=0; this.saveTask(t);this.event(id,{type:"action",action});return t;
+      if(action==="cancel")t.executionOutcome="stop";t.owner=""; t.lease=0; this.saveTask(t);this.event(id,{type:"action",action});return t;
     });
   }
   decision(id:string,decision:{id:string;value:string;reason:string}) {

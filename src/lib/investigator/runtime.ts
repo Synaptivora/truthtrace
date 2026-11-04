@@ -1,3 +1,4 @@
+import {ensurePlan,requestReplan,finishPlanStage,ReplanSchema} from "./plan";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -74,6 +75,7 @@ function rejectUnknownFields(value:unknown, schema:unknown):void {
   }
 }
 export function validateStageCall(step:number,name:string,args:unknown,submitOnly=false) {
+  if(name==="request_replan"){if(step!==6||submitOnly)throw new Error("当前阶段不允许重规划");ReplanSchema.parse(args);return;}
   const submit=name===stageActions[step]||name==="submit_artifact";
   if(submit) { const schema=artifactSchemaForStage(step); rejectUnknownFields(args,z.toJSONSchema(schema)); schema.parse(args); return; }
   if(submitOnly||step===0) throw new Error("当前阶段不允许此工具");
@@ -83,7 +85,7 @@ export function validateStageCall(step:number,name:string,args:unknown,submitOnl
   throw new Error("当前阶段不允许此工具");
 }
 export function investigationTools(step:number,submitOnly=false):Tool[]{
-  return [...(submitOnly||step===0?[]:tools.filter(tool=>tool.name!=="submit_artifact")),{name:stageActions[step],description:"提交并校验当前阶段成果，成功后进入下一阶段。证据不足时也应提交具体缺口。",parameters:z.toJSONSchema(artifactSchemaForStage(step))}];
+  return [...(step===6&&!submitOnly?[{name:"request_replan",description:"已读取新的反证后请求有限重提取；只能引用当前快照和已有主张，不直接提交新主张",parameters:z.toJSONSchema(ReplanSchema)}]:[]),...(submitOnly||step===0?[]:tools.filter(tool=>tool.name!=="submit_artifact")),{name:stageActions[step],description:"提交并校验当前阶段成果，成功后进入下一阶段。证据不足时也应提交具体缺口。",parameters:z.toJSONSchema(artifactSchemaForStage(step))}];
 }
 
 export function report(t:Task): string {
@@ -91,16 +93,18 @@ export function report(t:Task): string {
   const claims=artifacts.flatMap(a=>a.claims);
   const checks=artifacts.flatMap(a=>a.checks);
   const lines=[`# 调查报告草稿`, `调查目标：${t.goal}`, `调查方式：${investigationModes[t.mode || "deep"].label}`, `版本：${t.revision} · 模型辅助分析 · 最终判断由用户作出`, `模型：${t.model?`${t.model.provider} / ${t.model.name}`:"未调用"}`, "\n## 主张与核查"];
+  if(t.executionOutcome)lines.push(`执行结果：${t.executionOutcome}${t.error?"；"+t.error:""}`);
+  if(t.executionPlan)lines.push(`重规划：${t.executionPlan.replans}/${t.executionPlan.maxReplans}；仍待复核结果：${t.executionPlan.staleResultIds.join(", ")||"无"}`);
   const answer=artifacts.findLast(a=>a.answer)?.answer;
   if(answer)lines.push("\n## 对目标的回答",answer.text,`依据：[${answer.claimIds.join(", ")}]`);
   for(const c of claims) {
-    const check=checks.find(x=>x.claimId===c.id);
+    const check=t.executionPlan?.staleResultIds.includes(c.id)?undefined:checks.findLast(x=>x.claimId===c.id);
     lines.push(`\n### ${c.id} ${c.content}`,`类型：${c.kind}；核查：${check?.status||"insufficient"}`,check?.reason||"尚未核查");
     for(const ref of c.refs) {const s=t.snapshot.find(s=>s.id===ref.segmentId)!;lines.push(`> ${ref.quote.replace(/\n/g,"\n> ")}`,`来源：${s.name} · ${ref.evidenceId} v${ref.version} · ${s.kind==="image"?"整张图像，识别引文待人工核对":`字符 ${s.start}–${s.end}`} · ${ref.segmentId}`);}
   }
   for(const [key,title] of [["people","人物候选"],["relationships","关系"],["events","时间线"],["commitments","承诺"],["conflicts","潜在矛盾"]] as const) {
     lines.push(`\n## ${title}`);
-    for(const f of artifacts.flatMap(a=>a[key])) {const check=artifacts.flatMap(a=>a.findingChecks||[]).find(c=>c.findingId===f.id);lines.push(`- ${f.content} ${f.time||""} [${f.claimIds.join(", ")}]${f.alternatives.length?`；其他解释：${f.alternatives.join("；")}`:""}；核查：${check?.status||"insufficient"} ${check?.reason||"尚未核查"}`);}
+    for(const f of artifacts.flatMap(a=>a[key])) {const check=t.executionPlan?.staleResultIds.includes(f.id)?undefined:artifacts.flatMap(a=>a.findingChecks||[]).findLast(c=>c.findingId===f.id);lines.push(`- ${f.content} ${f.time||""} [${f.claimIds.join(", ")}]${f.alternatives.length?`；其他解释：${f.alternatives.join("；")}`:""}；核查：${check?.status||"insufficient"} ${check?.reason||"尚未核查"}`);}
   }
   lines.push("\n## 证据缺口与覆盖限制",...(t.collectionNotes||[]).map(g=>`- ${g}`),...artifacts.flatMap(a=>a.gaps).map(g=>`- ${g}`));
   const unread=t.snapshot.filter(s=>!t.reads.includes(s.id));
@@ -124,7 +128,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
   try {
     const config=resolveConnection(undefined,"investigation");
     if(!config?.tools) throw new Error("自主调查需要服务端模型连接及工具调用能力，请配置 AGENT_* 后重试");
-    checkpoint(t=>{t.model={provider:config.provider,name:config.model};});
+    checkpoint(t=>{ensurePlan(t);if(t.step<8)t.executionOutcome=undefined;t.model={provider:config.provider,name:config.model};});
     // Only user-fixed source scopes are sent to the ingestion service; the model cannot widen them.
     for(let i=initial.collectedSources||0;i<initial.scope.sources.length;i++) {
       const source=initial.scope.sources[i];const base=process.env.INGESTION_SERVICE_URL;
@@ -145,7 +149,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
       if(t.step>=skillNames.length) {
         checkpoint(current=>{
           const pending=current.artifacts.flatMap(a=>a.decisions).some(d=>!current.decisions.some(v=>v.id===d.id));
-          current.state=pending?"waiting_user":"completed";
+          current.state=current.executionOutcome==="insufficient"?"paused":pending?"waiting_user":"completed";current.executionOutcome=current.executionOutcome==="insufficient"?"insufficient":pending?"wait_user":"completed";
           store.saveReport(lease,report(current));
           store.event(current.id,{type:"report",state:current.state,revision:current.revision});
         }); break;
@@ -160,7 +164,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
         const submitOnly=round>=3;
         if(submitOnly)messages.push({role:"user",content:`本阶段剩余 ${5-round} 次提交机会。停止探索，使用 ${stageActions[t.step]} 提交已得到的结果；不足之处列出gaps，不能编造。`});
         checkpoint(current=>{
-          if(current.modelCalls>=40||current.toolCalls>=120||current.activeMs>=1800000||(current.lifetimeModelCalls??0)>=120||(current.lifetimeToolCalls??0)>=360||(current.lifetimeActiveMs??0)>=5400000) {current.state="paused";current.error="调查预算已耗尽，请缩小目标后创建新修订";return;}
+          if(current.modelCalls>=40||current.toolCalls>=120||current.activeMs>=1800000||(current.lifetimeModelCalls??0)>=120||(current.lifetimeToolCalls??0)>=360||(current.lifetimeActiveMs??0)>=5400000) {current.state="paused";current.executionOutcome="insufficient";current.error="调查预算已耗尽，请缩小目标后创建新修订";return;}
           current.modelCalls++;
         });
         if(store.task(t.id).state!=="running") break;
@@ -183,7 +187,8 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
             const args=JSON.parse(call.arguments);
             validateStageCall(t.step,call.name,args,submitOnly);
             const current=store.task(t.id);
-            if(call.name==="case_overview") output={goal:current.goal,artifacts:current.artifacts,decisions:current.decisions};
+            if(call.name==="request_replan"){checkpoint(c=>{requestReplan(c,args);store.event(c.id,{type:"replan",revision:c.revision,round:c.executionPlan?.replans,segmentIds:c.executionPlan?.requests.at(-1)?.segmentIds});});submitted=true;output={saved:true,replanning:true};}
+            else if(call.name==="case_overview") output={goal:current.goal,artifacts:current.artifacts,decisions:current.decisions};
             else if(call.name==="search_evidence"||call.name==="list_evidence") {
               const {query,person,from,to,offset}=querySchema.parse(args);
               const indexed=call.name==="search_evidence"&&query?store.searchSnapshot(current,query):null;
@@ -211,7 +216,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
               else {checkpoint(c=>{if(!c.reads.includes(s.id))c.reads.push(s.id);});output=s;}
             } else if(call.name==="submit_artifact"||call.name===stageActions[t.step]) {
               const artifact=validateArtifact(current,args);
-              checkpoint(c=>{if(c.step!==t.step)throw new Error("阶段已提交");c.artifacts.push(artifact);c.step=taskStages(c.mode).find(stage=>stage>c.step) ?? skillNames.length;store.event(c.id,{type:"step_completed",skill:name,version:1});});
+              checkpoint(c=>{if(c.step!==t.step)throw new Error("阶段已提交");c.artifacts.push(artifact);c.step=finishPlanStage(c,c.step,[...artifact.claims.map(x=>x.id),...artifact.checks.map(x=>x.claimId),...artifact.findingChecks.map(x=>x.findingId)]);store.event(c.id,{type:"step_completed",skill:name,version:1});});
               submitted=true; output={saved:true};
             } else throw new Error("未知工具");
           } catch(e) {output={error:e instanceof Error?e.message:"工具参数无效"};}
@@ -222,7 +227,7 @@ export async function runTask(store:Store, initial:Task, invoke= modelStep) {
           if(submitted) break;
         }
       }
-      if(!submitted) {checkpoint(c=>{c.state="paused";c.error=`${name} 达到执行预算，已保留进度`;});break;}
+      if(!submitted) {checkpoint(c=>{c.state="paused";c.executionOutcome="insufficient";c.error=`${name} 达到执行预算，已保留进度`;});break;}
     }
   } catch(e) {store.owned(lease,t=>{t.state="failed";const failure=safeError(e);t.error=failure.error;store.event(t.id,{type:"failed",code:failure.code});});}
   finally {clearInterval(heartbeat);}
