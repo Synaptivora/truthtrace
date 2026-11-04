@@ -12,6 +12,7 @@
 """
 import sys, os, threading, time, json, base64, uuid, mimetypes
 import urllib.request
+import security_test_auth
 from urllib.parse import quote
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

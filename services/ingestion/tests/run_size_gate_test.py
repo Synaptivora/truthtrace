@@ -20,6 +20,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import security_test_auth
 import urllib.parse
 import uuid
 

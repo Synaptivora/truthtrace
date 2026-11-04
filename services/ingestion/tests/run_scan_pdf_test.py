@@ -15,6 +15,7 @@
 """
 import sys, os, io, base64, uuid, time, json, subprocess, tempfile, shutil
 import urllib.request
+import security_test_auth
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)

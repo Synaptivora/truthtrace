@@ -60,6 +60,28 @@ class SecurityTests(unittest.TestCase):
     def test_authenticated_source(self):
         self.assertEqual(self.request(path='/service', headers=self.auth())[0], 200)
 
+class ArchiveTests(unittest.TestCase):
+    def test_quota_and_expiry(self):
+        import tempfile
+        import time
+        with tempfile.TemporaryDirectory() as directory:
+            previous = module.UPLOAD_DIR
+            module.UPLOAD_DIR = directory
+            try:
+                entry = Path(directory) / 'abcdefabcdef.txt'
+                entry.write_bytes(b'old')
+                os.utime(entry, (time.time()-8*86400, time.time()-8*86400))
+                stored = module.save_upload(b'new', 'new.txt')
+                self.assertFalse(entry.exists())
+                self.assertEqual((Path(directory)/stored).read_bytes(), b'new')
+                with (Path(directory)/'large.bin').open('wb') as output:
+                    output.truncate(250*1024*1024)
+                with self.assertRaises(ValueError):
+                    module.save_upload(b'blocked', 'blocked.txt')
+                self.assertFalse((Path(directory)/'.archive.lock').exists())
+            finally:
+                module.UPLOAD_DIR = previous
+
 if __name__ == '__main__':
     unittest.main()
 

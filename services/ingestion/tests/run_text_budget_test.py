@@ -24,6 +24,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import security_test_auth
 import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
