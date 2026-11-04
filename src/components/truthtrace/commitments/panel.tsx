@@ -11,7 +11,7 @@ export function CommitmentPanel({result,onOpenReference,onReview,reviewing=false
  const rows=all.filter(row=>filter==="all"||filter==="due"&&row.dueForReview||filter===row.state).sort((a,b)=>(a.dueAt||"9999").localeCompare(b.dueAt||"9999"));
  return <section aria-label="承诺追踪" className={styles.panel} aria-busy={reviewing}>
  <header className={styles.heading}><div><h2>承诺追踪</h2><p>从原文承诺出发，逐项核对履行依据。</p></div><span className={styles.count}>{all.length} 项记录</span></header>
- <div className={styles.toolbar}><label>筛选承诺<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">全部承诺</option><option value="due">已到明确期限，需核查</option>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><button className={styles.primary} disabled={reviewing} onClick={onReview}>{reviewing?'正在重新核查…':'重新核查材料'}</button></div>
+ <div className={styles.toolbar}><label>筛选承诺<select aria-label="筛选承诺" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">全部承诺</option><option value="due">已到明确期限，需核查</option>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><button className={styles.primary} disabled={reviewing} onClick={onReview}>{reviewing?'正在重新核查…':'重新核查材料'}</button></div>
  <p className={styles.boundary}>到期只提示需要核查，不代表违约；未发现付款记录不代表未付款。</p>
  {reviewing&&<p role="status" className={styles.progress}>正在核对材料，现有承诺记录会保留。</p>}
  {!rows.length&&<div className={styles.empty}><strong>{all.length?'没有符合筛选条件的承诺':'尚未提取到明确承诺'}</strong><p>{all.length?'调整状态筛选，查看其他记录。':'可补充相关聊天或凭据，再重新核查材料。'}</p></div>}
