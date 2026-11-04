@@ -21,6 +21,8 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
   const [analyzing,setAnalyzing]=useState(false);
   const [notes, setNotes] = useState<Record<string, string>>(result.reviewNotes || {});
   const [comparison, setComparison] = useState<string | null>(null);
+  const downloadUrls = useRef(new Set<string>());
+  useEffect(() => () => { for (const url of downloadUrls.current) URL.revokeObjectURL(url); downloadUrls.current.clear(); }, []);
   const upload = useRef<HTMLInputElement>(null);
   const request = useRef<AbortController | null>(null);
   const [view, setView] = useState<"graph" | "timeline" | "evidence" | "actions">("graph");
@@ -69,7 +71,7 @@ export function ContractWorkbench({ result, onHome, onUpdate }: { result: CaseAn
   }
   function exportReport() {
     const url = URL.createObjectURL(new Blob([analysisReport(result, notes)], { type: "text/markdown;charset=utf-8" }));
-    const link = document.createElement("a"); link.href = url; link.download = "TruthTrace-调查报告.md"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const link = document.createElement("a"); link.href = url; link.download = "TruthTrace-调查报告.md"; downloadUrls.current.add(url); document.body.appendChild(link); link.click(); link.remove();
   }
   async function reanalyze(){setAnalyzing(true);setError("");try{
     const response=await fetch(`/api/cases/${result.caseId}/analyze`,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const data=await response.json();

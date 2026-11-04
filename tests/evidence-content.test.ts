@@ -23,6 +23,17 @@ const image = (name: string): Evidence => ({
 });
 
 describe("EvidenceContent", () => {
+  it("never guesses a filename prefix",()=>{
+    const message=chat("[图片@2026-07-26 09:22:00: receipt 见独立证据]");
+    const html=renderToStaticMarkup(createElement(EvidenceContent,{item:message,all:[image("receipt-other.png")]}));
+    expect(html).toContain("disabled");
+  });
+  it("shows duplicate names as candidates instead of choosing the first",()=>{
+    const message=chat("[图片@2026-07-26 09:22:00: same.png 见独立证据]");
+    const html=renderToStaticMarkup(createElement(EvidenceContent,{item:message,all:[image("same.png"),{...image("same.png"),id:"img-2",source:"another chat"}]}));
+    expect(html).toContain("2 个候选");expect(html).toContain("img-2");expect(html).toContain("another chat");
+  });
+
   it("把聊天里的图片标记渲染成可点的 chip（按证据名匹配）", () => {
     const message = chat("[2026-07-26 09:22:00] 王五: [图片@2026-07-26 09:22:00: 转账截图.png 见独立证据]");
     const html = renderToStaticMarkup(
