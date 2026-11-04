@@ -99,6 +99,22 @@ class DeadlineSecurity(unittest.TestCase):
     with self.assertRaises(RuntimeError):OpenAICompatibleClient({'base_url':origin,'api_key':'fixture','timeout':1})._post('x',{})
     self.assertLess(time.monotonic()-start,1.7)
   finally:app.shutdown();app.server_close()
+ def test_deadline_targets_tls_socket_during_handshake(self):
+  from unittest.mock import Mock
+  closed=threading.Event();plain=Mock();tls=Mock()
+  tls.shutdown.side_effect=lambda *_:closed.set()
+  def handshake():
+   if not closed.wait(1.6):raise AssertionError('deadline targeted detached socket')
+   raise OSError('closed')
+  tls.do_handshake.side_effect=handshake
+  context=Mock()
+  def wrap(sock,**kwargs):
+   self.assertIs(sock,plain);self.assertFalse(kwargs['do_handshake_on_connect']);return tls
+  context.wrap_socket.side_effect=wrap
+  with patch('ai_ingest.secure_transport.socket.getaddrinfo',return_value=[(2,1,6,'',('8.8.8.8',443))]),patch('ai_ingest.secure_transport.socket.socket',return_value=plain),patch('ai_ingest.secure_transport.ssl.create_default_context',return_value=context):
+   start=time.monotonic()
+   with self.assertRaises(RuntimeError):OpenAICompatibleClient({'base_url':'https://fixture.invalid','api_key':'fixture','timeout':1})._post('x',{})
+   self.assertTrue(closed.is_set());self.assertLess(time.monotonic()-start,1.5);plain.shutdown.assert_not_called()
  def test_dns_consumes_total_deadline(self):
   def slow(*args,**kwargs):time.sleep(2);return []
   with patch('ai_ingest.secure_transport.socket.getaddrinfo',slow):

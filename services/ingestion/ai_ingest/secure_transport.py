@@ -10,6 +10,8 @@ import time
 import queue
 from urllib.parse import urlsplit
 
+_DNS_SLOTS = threading.BoundedSemaphore(8)
+
 def public_address(value):
     address = ipaddress.ip_address(value)
     if not address.is_global:
@@ -30,10 +32,12 @@ def post_json(config, path, body):
         allowed = origin in {x.strip() for x in os.environ.get('TRUTHTRACE_MODEL_PRIVATE_ORIGINS', '').split(',') if x.strip()}
         if not host or url.username or url.password or url.query or url.fragment or not (url.scheme == 'https' or allowed and url.scheme == 'http'):
             raise ValueError()
+        if not _DNS_SLOTS.acquire(timeout=max(0, deadline-time.monotonic())): raise TimeoutError()
         resolved = queue.Queue(maxsize=1)
         def resolve():
             try: resolved.put((socket.getaddrinfo(host, port, type=socket.SOCK_STREAM), None))
             except Exception as error: resolved.put((None, error))
+            finally: _DNS_SLOTS.release()
         threading.Thread(target=resolve, daemon=True).start()
         addresses, error = resolved.get(timeout=max(.001, deadline-time.monotonic()))
         if error: raise error
@@ -44,10 +48,12 @@ def post_json(config, path, body):
         if timeout <= 0: raise TimeoutError()
         # Resolve once; connect to the exact authorized sockaddr, preserving TLS SNI.
         sock = socket.socket(family, kind, protocol)
+        socket_lock = threading.Lock()
         def expire():
-            try: sock.shutdown(socket.SHUT_RDWR)
-            except OSError: pass
-            sock.close()
+            with socket_lock:
+                try: sock.shutdown(socket.SHUT_RDWR)
+                except OSError: pass
+                sock.close()
         timer = threading.Timer(timeout, expire)
         timer.daemon = True
         timer.start()
@@ -55,7 +61,13 @@ def post_json(config, path, body):
             sock.settimeout(timeout)
             sock.connect(address)
             if url.scheme == 'https':
-                sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+                context = ssl.create_default_context()
+                # Publish the TLS socket before any blocking handshake. The timer must never
+                # observe the detached plain socket during the ownership transfer.
+                with socket_lock:
+                    if time.monotonic() >= deadline: raise TimeoutError()
+                    sock = context.wrap_socket(sock, server_hostname=host, do_handshake_on_connect=False)
+                sock.do_handshake()
             connection = http.client.HTTPConnection(host, port, timeout=timeout)
             connection.sock = sock
             connection.request('POST', url.path or '/', json.dumps(body, ensure_ascii=False).encode(), {'Content-Type':'application/json', 'Authorization':'Bearer ' + config['api_key']})
