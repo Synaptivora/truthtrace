@@ -182,6 +182,10 @@ export class Store {
       if(!t.artifacts.some(a=>a.decisions.some(d=>d.id===decision.id)))throw new Error("决定项不存在");
       this.db.prepare("INSERT OR IGNORE INTO task_revisions VALUES(?,?,?)").run(t.id,t.revision,JSON.stringify(t));
       t.decisions.push({...decision,at:new Date().toISOString()});
+      // Collection/extraction are not rerun after a decision. Keep their warnings as
+      // explicitly historical notes, never as a current verified finding.
+      const historicalGaps=t.artifacts.flatMap((artifact,index)=>artifact.gaps.map(gap=>`历史覆盖备注（修订 ${t.revision}，成果 ${index+1}；当前是否仍存在待重新确认，不作为本轮核查结论）：${gap}`));
+      t.collectionNotes=[...new Set([...(t.collectionNotes||[]),...historicalGaps])];
       // Decisions invalidate derived findings, not source claims (including later replan extractions).
       t.artifacts=t.artifacts.filter(a=>a.claims.length||a.plan.length).map(a=>({...a,summary:"保留原文主张和计划；衍生结果将在用户判断后重新核查。",people:[],relationships:[],events:[],conflicts:[],commitments:[],checks:[],findingChecks:[],decisions:[],gaps:[],answer:undefined}));
       t.step=taskStages(t.mode).find(stage=>stage>=3)!;t.revision++;t.executionPlan=undefined;t.executionOutcome=undefined;t.error="";t.state="queued";t.owner="";t.lease=0;t.leaseEpoch=(t.leaseEpoch||0)+1;

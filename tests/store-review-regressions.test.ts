@@ -27,3 +27,10 @@ it('rejects cancelled decisions and prevents parallel active tasks',()=>fixture(
  const a=s.createTask('c',{goal:'A',idempotencyKey:'a'});a.artifacts=[ArtifactSchema.parse({summary:'fixture',decisions:[{id:'d',question:'fixture',claimIds:['c0']}]})];a.state='cancelled';s.saveTask(a);s.createTask('c',{goal:'B',idempotencyKey:'b'});
  expect(()=>s.decision(a.id,{id:'d',value:'yes',reason:'fixture'})).toThrow('状态');a.state='paused';s.saveTask(a);expect(()=>s.decision(a.id,{id:'d',value:'yes',reason:'fixture'})).toThrow('其他');expect(s.task(a.id).state).toBe('paused');
 }));
+
+it('retains prior gaps as historical coverage notes without retaining stale judgments',()=>fixture(s=>{
+ const t=s.createTask('c',{goal:'fixture',idempotencyKey:'gap'});t.state='waiting_user';t.collectionNotes=['解析服务报告附件截断'];
+ t.artifacts=[ArtifactSchema.parse({summary:'collection',gaps:['附件无法读取']}),ArtifactSchema.parse({summary:'extraction',claims:[{id:'c',content:'承诺退款',kind:'statement',refs:[{evidenceId:'e',version:1,segmentId:t.snapshot[0].id,quote:'承诺退款'}]}],gaps:['缺少到账凭证']}),ArtifactSchema.parse({summary:'verification',checks:[{claimId:'c',status:'supported',reason:'OLD_CHECK_MUST_NOT_SURVIVE'}],decisions:[{id:'d',question:'人工确认',claimIds:['c']}]})];s.saveTask(t);
+ const next=s.decision(t.id,{id:'d',value:'accepted',reason:'用户提交判断'});expect(next.collectionNotes).toContain('解析服务报告附件截断');expect(next.collectionNotes?.some(n=>n.includes('附件无法读取')&&n.includes('修订 1')&&n.includes('不作为本轮核查结论'))).toBe(true);expect(next.collectionNotes?.some(n=>n.includes('缺少到账凭证'))).toBe(true);expect(next.artifacts.flatMap(a=>a.checks)).toEqual([]);expect(next.artifacts.flatMap(a=>a.gaps)).toEqual([]);expect(JSON.stringify(next.collectionNotes)).not.toContain('OLD_CHECK');expect(next.step).toBe(3);
+ expect(s.action(t.id,'revise').collectionNotes).toEqual([]);
+}));
