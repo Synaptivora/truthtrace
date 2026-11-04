@@ -1,10 +1,11 @@
+import { secureRoute } from "@/lib/security/boundary";
 import { Store } from "@/lib/investigator/store";
 import { effectiveConnection } from "@/lib/investigator/connections";
 import { analyzeEvidence } from "@/lib/ai/provider";
 import { readJson } from "@/lib/agent/http";
 export const runtime="nodejs";
 export const maxDuration=300;
-export async function POST(request:Request,{params}:{params:Promise<{id:string}>}) {
+async function rawPOST(request:Request,{params}:{params:Promise<{id:string}>}) {
   const store=new Store();
   try{
     await readJson(request,1000);
@@ -21,3 +22,5 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
   }catch(e){const message=e instanceof Error?e.message:"";return Response.json({error:message.startsWith("模型服务 HTTP")||/分析期间|当前分析连接/.test(message)?message:"模型分析未完成，原材料和原分析已保留。请检查连接后重试。"},{status:502});}
   finally{store.close();}
 }
+
+export const POST = secureRoute(rawPOST);

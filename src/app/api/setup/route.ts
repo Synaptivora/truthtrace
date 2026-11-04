@@ -1,3 +1,4 @@
+import { secureRoute } from "@/lib/security/boundary";
 import { NextResponse } from "next/server";
 import { ensureIngestion } from "@/lib/ingestion/service";
 import {
@@ -60,7 +61,7 @@ function snapshot(job: Job) {
 
 /** GET /api/setup            → 只读检测结果（零副作用）
  *  GET /api/setup?job=<id>   → 轮询某个配置任务的进度 */
-export async function GET(request: Request) {
+async function rawGET(request: Request) {
   if (!localOnly(request)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const url = new URL(request.url);
   const id = url.searchParams.get("job");
@@ -74,7 +75,7 @@ export async function GET(request: Request) {
 }
 
 /** POST /api/setup {"action":"install"|"login-dingtalk"|"capture-wechat-key"} */
-export async function POST(request: Request) {
+async function rawPOST(request: Request) {
   if (!localOnly(request)) {
     return NextResponse.json(
       { error: "本机配置接口只允许 localhost 访问（或被 SYNAPSE_SETUP_ENABLED=0 关闭）" },
@@ -134,3 +135,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ jobId: id, status: "running" });
 }
+
+export const GET = secureRoute(rawGET);
+
+export const POST = secureRoute(rawPOST);

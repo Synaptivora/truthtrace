@@ -1,0 +1,11 @@
+# Local API boundary
+
+Use `npm run dev:local` or `start:local`. The launcher binds Next to 127.0.0.1 and explicitly enables browser session bootstrap. Direct Next startup does not enable bootstrap; machine clients need TRUTHTRACE_MACHINE_TOKEN (at least 32 characters). Remote mode fails closed until authentication and case ACL exist. Host validation does not prove physical client locality: never enable bootstrap on a non-loopback listener or forwarded/public proxy.
+
+Only a trusted local document navigation with Fetch Metadata none/same-origin gets an HttpOnly SameSite=Strict 12-hour cookie. API handlers independently verify it. Writes require matching Origin; browser GET without Origin requires same-origin Fetch Metadata and a valid session. Machine Bearer credentials permit absent Origin but never a mismatched Origin. This is a local single-user boundary, not multi-user case ACL.
+
+All existing GET/POST exports use secureRoute. Reads are authenticated; bodies are counted before handlers run (2 MiB normally, 25 MiB multipart/case persistence). Oversize fails with 413; errors are replaced with safe messages and trace IDs. Global per-process local rate budget is 600/minute, not a distributed limiter. Endpoint-specific error details are intentionally suppressed; UI must handle generic messages. Streaming successful responses retain their current event contract; this wrapper cannot sanitize errors emitted inside an already-running successful stream.
+
+Ingestion uses ingestionFetch and only literal loopback HTTP destinations. Bearer token is injected, redirects rejected, multipart encoded within the upload cap, and Content-Length set. Launcher shares a random token with Python and worker; direct Next auto-spawn uses a private local secret file. Secrets are excluded by .truthtrace gitignore; Windows filesystem ACLs require deployment review (POSIX mode is not Windows encryption). No database migration. Roll back code and launcher together; do not disable Python authentication while keeping network exposure.
+
+Validation: focused auth/byte-limit/error tests and TypeScript. Existing route tests that called unauthenticated handlers must be migrated to explicit test machine credentials; no bypass is provided. Full browser/Python integration and real model behavior remain integration gates.

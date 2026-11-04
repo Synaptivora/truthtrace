@@ -1,9 +1,10 @@
+import { secureRoute } from "@/lib/security/boundary";
 import { AgentRequestSchema, type AgentEvent } from "@/lib/agent/contracts";
 import { runAgent } from "@/lib/agent/runner";
 import { readJson } from "@/lib/agent/http";
 export const runtime = "nodejs";
 export const maxDuration = 120;
-export async function POST(request: Request) {
+async function rawPOST(request: Request) {
   let input;
   try { input = AgentRequestSchema.parse(await readJson(request)); }
   catch { return Response.json({ error: "请求格式无效、材料超过 12 MB 或来源不允许，请检查后重试。" }, { status: 400 }); }
@@ -21,3 +22,5 @@ export async function POST(request: Request) {
   });
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
 }
+
+export const POST = secureRoute(rawPOST);
