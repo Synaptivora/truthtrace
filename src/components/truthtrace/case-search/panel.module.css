@@ -1,0 +1,25 @@
+.panel { margin: 24px 0; color: #493a28; font: 14px/1.65 system-ui, sans-serif; }
+.drawer { border: 1px solid #756344; border-radius: 12px; overflow: hidden; background: #29261f; }
+.entry { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; color: #f4e5c9; list-style: none; }
+.entry::-webkit-details-marker { display: none; }
+.entry strong { display: block; font-size: 16px; font-weight: 600; }
+.entry small { display: block; color: #c8b795; margin-top: 3px; font-size: 13px; }
+.toggle { color: #dfbd7d; white-space: nowrap; font-size: 12px; }
+.body { padding: 22px; background: #f5efdf; }
+.panel nav { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid #d3c6ad; padding-bottom: 14px; }
+.panel button { cursor: pointer; border: 1px solid #b7a384; border-radius: 7px; padding: 8px 14px; background: #fffaf0; color: #493a28; font: inherit; min-height: 40px; }
+.panel button:hover { background: #eaddc3; }
+.panel button[aria-pressed="true"] { background: #6c4d2d; border-color: #6c4d2d; color: #fff9ec; }
+.panel label { display: inline-flex; flex-direction: column; gap: 5px; color: #64513a; font-size: 13px; min-width: 140px; }
+.panel input, .panel select { box-sizing: border-box; min-height: 40px; max-width: 100%; padding: 8px 10px; border: 1px solid #bead91; border-radius: 6px; background: #fffdf8; color: #342a1d; font: inherit; color-scheme: light; }
+.panel input[type="checkbox"] { min-height: auto; }
+.panel button:disabled, .panel select:disabled { opacity: .6; cursor: not-allowed; }
+.panel :is(button,input,select,summary):focus-visible { outline: 3px solid #b47c31; outline-offset: 3px; }
+.panel form { align-items: end; }
+.panel p { color: #69573f; margin: 14px 0; }
+.panel small { color: #74634c; }
+.entry small { color: #c8b795; }
+.panel article { margin-top: 14px; padding: 16px; background: #fffcf4; border: 1px solid #d8c9af; border-radius: 8px; }
+.panel blockquote { margin: 12px 0; padding: 10px 14px; border-left: 3px solid #b69a68; color: #493a28; }
+.panel [role="alert"] { color: #942f24; }
+@media(max-width:600px) { .body { padding: 16px; } .entry { padding: 16px; } .panel label { flex: 1 1 100%; min-width: 0; } .panel input,.panel select { width: 100%; } .panel nav button { flex: 1; } }
