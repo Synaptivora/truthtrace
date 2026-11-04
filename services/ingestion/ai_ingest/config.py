@@ -64,15 +64,5 @@ class OpenAICompatibleClient:
         return ""
 
     def _post(self, path: str, body: dict) -> dict:
-        url = f"{self.cfg['base_url']}/{path}"
-        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
-        req = urllib.request.Request(
-            url, data=data,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.cfg['api_key']}",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=self.cfg["timeout"]) as r:
-            return json.loads(r.read().decode("utf-8"))
+        from .secure_transport import post_json
+        return post_json(self.cfg, path, body)

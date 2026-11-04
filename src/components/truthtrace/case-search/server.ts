@@ -12,9 +12,10 @@ export function searchCases(store:Store,input:unknown){
  const filters=FilterSchema.parse(input);if(filters.from&&filters.to&&filters.from>filters.to)throw Error('Invalid date range');
  const meta=metadata(store);const cases=store.cases(); // Local single-user only; route remote mode fails closed.
  const catalog=cases.map(c=>({caseId:c.caseId,name:c.caseName||c.analysis.caseTitle,...(meta.get(c.caseId)||{tags:[],archived:false}),people:c.analysis.people.map(p=>({id:p.id,name:p.name})),commitments:c.analysis.commitments.length}));
+ const scopedCases=cases.filter(c=>{const m=meta.get(c.caseId)||{tags:[],archived:false};return (!filters.caseId||c.caseId===filters.caseId)&&(!filters.tag||m.tags.includes(filters.tag))&&(filters.archived==='all'||m.archived===(filters.archived==='yes'));});
  const db=new DatabaseSync(':memory:');
  try{const index=new EvidenceIndex(db);const matches=[];
- for(const c of cases){const m=meta.get(c.caseId)||{tags:[],archived:false};if(filters.caseId&&c.caseId!==filters.caseId||filters.tag&&!m.tags.includes(filters.tag)||filters.archived!=='all'&&m.archived!==(filters.archived==='yes'))continue;
+ for(const c of scopedCases){const m=meta.get(c.caseId)||{tags:[],archived:false};if(filters.caseId&&c.caseId!==filters.caseId||filters.tag&&!m.tags.includes(filters.tag)||filters.archived!=='all'&&m.archived!==(filters.archived==='yes'))continue;
  const person=filters.personId?c.analysis.people.find(p=>p.id===filters.personId):null;if(filters.personId&&!person)continue;
  for(const e of c.evidence){if(person&&!person.evidenceRefs.some(ref=>ref.evidenceId===e.id))continue;
  const scope={caseId:c.caseId,evidenceId:e.id,version:e.version||1};const segments=segmentEvidence({...scope,content:e.content,kind:e.kind,source:e.source});index.replaceVersion(scope,segments);
@@ -25,6 +26,6 @@ export function searchCases(store:Store,input:unknown){
  index.replaceVersion(scope,[]);
  }}
  matches.sort((a,b)=>a.caseId.localeCompare(b.caseId)||a.evidenceId.localeCompare(b.evidenceId)||a.start-b.start);
- return {cases:catalog,commitments:cases.flatMap(c=>commitmentProjection(c)),hits:matches.slice(filters.offset,filters.offset+20),total:matches.length,nextOffset:filters.offset+20<matches.length?filters.offset+20:null,note:'按材料原文检索；未做事实核实。日期仅匹配明确日期，人物仅为候选关联。'};
+ return {cases:catalog,commitments:scopedCases.flatMap(c=>commitmentProjection(c)),hits:matches.slice(filters.offset,filters.offset+20),total:matches.length,nextOffset:filters.offset+20<matches.length?filters.offset+20:null,note:'按材料原文检索；未做事实核实。日期仅匹配明确日期，人物仅为候选关联。'};
  }finally{db.close();}
 }

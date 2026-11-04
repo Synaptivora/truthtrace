@@ -1,4 +1,4 @@
-import {validateEvidenceRef} from "../evidence/provenance";
+import {createEvidenceRef,validateEvidenceRef} from "../evidence/provenance";
 import {EvidenceIndex} from "../search";
 import {segmentEvidence} from "../evidence-index/segments";
 import { DatabaseSync } from "node:sqlite";
@@ -55,7 +55,7 @@ export class Store {
       c.evidence = [...new Map(c.evidence.map(e => {const saved=this.saveEvidence(c.caseId,e);return [saved.id,saved] as const;})).values()];
       for(const collection of [c.analysis.people,c.analysis.relationships,c.analysis.events,c.analysis.contradictions,c.analysis.commitments,c.analysis.evidenceGaps])for(const item of collection)item.evidenceRefs=item.evidenceRefs.map(ref=>this.validateStoredRef(c.caseId,ref,c.evidence));
       this.db.prepare("INSERT INTO cases VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(c.caseId, JSON.stringify(c));
-      if(!insideTransaction&&before&&JSON.stringify(before.evidence.map(e=>[e.id,e.kind,e.content]))!==JSON.stringify(c.evidence.map(e=>[e.id,e.kind,e.content])))for(const t of this.tasks(c.caseId)){
+      if(!insideTransaction&&before&&JSON.stringify(before.evidence.map(e=>[e.id,e.kind,e.content,e.version]))!==JSON.stringify(c.evidence.map(e=>[e.id,e.kind,e.content,e.version])))for(const t of this.tasks(c.caseId)){
         t.stale={reason:"evidence_changed",since:new Date().toISOString(),evidenceIds:c.evidence.map(e=>e.id)};
         if(["running","queued"].includes(t.state))t.state="paused";
         t.owner="";t.lease=0;t.leaseEpoch=(t.leaseEpoch||0)+1;this.saveTask(t);this.event(t.id,{type:"stale",revision:t.revision});
@@ -67,7 +67,18 @@ export class Store {
   private validateStoredRef(caseId:string,ref:EvidenceRef,current:Evidence[]):EvidenceRef {
     if(ref.citationValidation==="validated"&&!ref.provenance)throw new Error("已校验引用必须包含版本来源");
     const p=ref.provenance;
-    if(!p)return validateEvidenceRef(ref,current);
+    if(!p){
+      const checked=validateEvidenceRef(ref,current);
+      const e=current.find(e=>e.id===ref.evidenceId)!;
+      // Bind only after saveEvidence assigned a durable version. Repeated quotes are ambiguous.
+      if(e.kind==="image")return checked;
+      const start=e.content.indexOf(ref.quote);
+      if(start<0||e.content.indexOf(ref.quote,start+1)!==-1)return checked;
+      const segments:Segment[]=[];
+      for(let offset=0;offset<e.content.length;offset+=4000)segments.push({id:`${e.id}@${e.version}:${offset}`,evidenceId:e.id,version:e.version!,name:e.name,kind:e.kind,start:offset,end:Math.min(offset+4000,e.content.length),content:e.content.slice(offset,offset+4000)});
+      const bound=createEvidenceRef(e,start,start+ref.quote.length,{caseId,evidence:[e],segments});
+      return this.validateStoredRef(caseId,{...checked,...bound},current);
+    }
     if(p.caseId!==caseId||p.evidenceId!==ref.evidenceId)throw new Error("引用案件或证据身份不匹配");
     const row=this.db.prepare("SELECT body,hash FROM evidence WHERE case_id=? AND id=? AND version=?").get(caseId,ref.evidenceId,p.version) as {body:string;hash:string}|undefined;
     if(!row)throw new Error("引用历史版本不存在");
@@ -81,9 +92,11 @@ export class Store {
   }
   private saveEvidence(caseId: string, e: Evidence) {
     const hash = createHash("sha256").update(e.kind + "\0" + e.content).digest("hex");
-    const last=this.db.prepare("SELECT version,hash FROM evidence WHERE case_id=? AND id=? ORDER BY version DESC LIMIT 1").get(caseId,e.id) as {version:number;hash:string}|undefined;
-    const version=last?.hash===hash?last.version:(last?.version||0)+1;
-    const saved={...e,version};if(last?.hash===hash)return saved;
+    const last=this.db.prepare("SELECT version,hash,body FROM evidence WHERE case_id=? AND id=? ORDER BY version DESC LIMIT 1").get(caseId,e.id) as {version:number;hash:string;body:string}|undefined;
+    const identity=(value:Evidence)=>[value.name,value.mimeType,value.source??null,value.originalHash??null,value.parserVersion??null];
+    const unchanged=last?.hash===hash&&JSON.stringify(identity(JSON.parse(last.body)))===JSON.stringify(identity(e));
+    const version=unchanged?last!.version:(last?.version||0)+1;
+    const saved={...e,version};if(unchanged)return saved;
     try { writeFileSync(join(this.directory, "objects", hash), e.content, { flag: "wx" }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
     this.db.prepare("INSERT INTO evidence VALUES(?,?,?,?,?)").run(caseId, e.id, version, hash, JSON.stringify(saved));
     this.index.replaceVersion({caseId,evidenceId:e.id,version},segmentEvidence({caseId,evidenceId:e.id,version,kind:e.kind,content:e.content,source:e.source}));
@@ -161,7 +174,23 @@ export class Store {
     });
   }
   decision(id:string,decision:{id:string;value:string;reason:string}) {
-    return this.transaction(()=>{const t=this.task(id);if(t.state==="running")throw new Error("请先暂停调查，再提交判断");if(!t.artifacts.some(a=>a.decisions.some(d=>d.id===decision.id))) throw new Error("决定项不存在"); t.decisions.push({...decision,at:new Date().toISOString()});t.artifacts=t.artifacts.slice(0,3);t.step=taskStages(t.mode).find(stage=>stage>=3)!;t.revision++;t.state="queued";t.owner="";t.lease=0; this.saveTask(t); this.event(id,{type:"decision",...decision}); return t;});
+    return this.transaction(()=>{
+      const t=this.task(id);
+      if(!["waiting_user","paused"].includes(t.state))throw new Error("当前状态不支持提交判断，请先暂停调查");
+      if(this.tasks(t.caseId).some(other=>other.id!==id&&["queued","running","waiting_user","paused"].includes(other.state)))throw new Error("本案已有其他正在进行的调查");
+      if(t.decisions.some(d=>d.id===decision.id))throw new Error("决定项已提交，请勿重复提交");
+      if(!t.artifacts.some(a=>a.decisions.some(d=>d.id===decision.id)))throw new Error("决定项不存在");
+      this.db.prepare("INSERT OR IGNORE INTO task_revisions VALUES(?,?,?)").run(t.id,t.revision,JSON.stringify(t));
+      t.decisions.push({...decision,at:new Date().toISOString()});
+      // Collection/extraction are not rerun after a decision. Keep their warnings as
+      // explicitly historical notes, never as a current verified finding.
+      const historicalGaps=t.artifacts.flatMap((artifact,index)=>artifact.gaps.map(gap=>`历史覆盖备注（修订 ${t.revision}，成果 ${index+1}；当前是否仍存在待重新确认，不作为本轮核查结论）：${gap}`));
+      t.collectionNotes=[...new Set([...(t.collectionNotes||[]),...historicalGaps])];
+      // Decisions invalidate derived findings, not source claims (including later replan extractions).
+      t.artifacts=t.artifacts.filter(a=>a.claims.length||a.plan.length).map(a=>({...a,summary:"保留原文主张和计划；衍生结果将在用户判断后重新核查。",people:[],relationships:[],events:[],conflicts:[],commitments:[],checks:[],findingChecks:[],decisions:[],gaps:[],answer:undefined}));
+      t.step=taskStages(t.mode).find(stage=>stage>=3)!;t.revision++;t.executionPlan=undefined;t.executionOutcome=undefined;t.error="";t.state="queued";t.owner="";t.lease=0;t.leaseEpoch=(t.leaseEpoch||0)+1;
+      this.saveTask(t);this.event(id,{type:"decision",...decision});return t;
+    });
   }
   close() {this.db.close();}
 }

@@ -3,6 +3,18 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  ingestion-security:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -X utf8 services/ingestion/tests/security_boundary_test.py
+      - run: python -X utf8 services/ingestion/tests/security_review_test.py
   check:
     runs-on: ubuntu-latest
     steps:
@@ -14,5 +26,9 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: node --import tsx scripts/ingestion-readiness-smoke.mjs
       - run: npm run build
       - run: npm run typecheck

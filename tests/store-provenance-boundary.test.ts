@@ -13,7 +13,7 @@ it('validates save-boundary provenance transactionally including new cases and h
  for(const bad of [{...ref,provenance:undefined},{...ref,provenance:{...provenance,caseId:'foreign'}},{...ref,provenance:{...provenance,version:99}},{...ref,quote:'已经到账'},{...ref,provenance:{...provenance,parserVersion:'forged'}},{...ref,provenance:{...provenance,originalHash:'a'.repeat(64)}},{...ref,evidenceId:'missing'}])expect(()=>save(bad)).toThrow();
  expect(s.cases()).toHaveLength(0);const created=save(ref);expect(created.analysis.people[0].evidenceRefs[0].citationValidation).toBe('validated');
  const historical=save(ref,'现在内容已更新');expect(historical.evidence[0].version).toBe(2);expect(historical.analysis.people[0].evidenceRefs[0].provenance?.version).toBe(1);
- const legacy=save({evidenceId:'e',quote:'现在内容已更新'},'现在内容已更新');expect(legacy.analysis.people[0].evidenceRefs[0].citationValidation).toBe('legacy_unresolved');
+ const legacy=save({evidenceId:'e',quote:'现在内容已更新'},'现在内容已更新');expect(legacy.analysis.people[0].evidenceRefs[0].citationValidation).toBe('validated');expect(legacy.analysis.people[0].evidenceRefs[0].provenance?.version).toBe(2);
  expect(()=>save({evidenceId:'missing',quote:'承诺退款'})).toThrow();expect(()=>save({evidenceId:'e',quote:'不存在的原文'})).toThrow();
  }finally{s.close();rmSync(dir,{recursive:true,force:true});}
 });

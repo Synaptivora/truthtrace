@@ -96,10 +96,10 @@ export async function analyzeFiles(files: File[], signal: AbortSignal, onParsed:
   if (dropped.evidence) notice.droppedEvidence = dropped.evidence;
   if (dropped.images) notice.droppedImages = dropped.images;
   if (combined.length > kept.length) {
-    notice.note = `解析出 ${combined.length} 条证据，本次最多送 ${MAX_ANALYZE_EVIDENCE} 条`;
+    notice.note = [notice.note, `全部 ${combined.length} 条材料已保留，本次仅送 ${MAX_ANALYZE_EVIDENCE} 条分析，其余 ${combined.length-kept.length} 条尚未分析；案件保存仍需通过服务器容量检查。`].filter(Boolean).join("；");
   }
   return {
-    evidence: kept,
+    evidence: combined,
     analysis: result.data,
     ...(Object.keys(notice).length ? { notice } : {}),
   };
