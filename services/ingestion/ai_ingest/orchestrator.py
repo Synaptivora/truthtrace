@@ -51,7 +51,7 @@ def _post_windows(windows: list, url: str, out_dir: str):
 def main():
     ap = argparse.ArgumentParser(description="A 智能取数编排器（方案 A）：让 AI 用透取数工具")
     ap.add_argument("--goal", default=DEFAULT_GOAL, help="调查目标")
-    ap.add_argument("--source", default="mock", choices=["mock", "dingtalk", "wechat", "feishu"],
+    ap.add_argument("--source", default="mock", choices=["mock", "dingtalk", "wechat"],
                     help="数据源")
     ap.add_argument("--source-data", default=None, help="dingtalk/wechat 的导出 JSON 路径")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "output"), help="证据输出目录")
@@ -80,7 +80,7 @@ def main():
         print(f"[agent] MockAgent（无 LLM key 或 --mode mock）")
 
     # 3) 跑 agentic 检索
-    #    必须传 backend.source（钉钉/微信/飞书/mock）而不是 args.source（dingtalk/wechat/...）：
+    #    必须传 backend.source（钉钉/微信/mock）而不是 args.source（dingtalk/wechat/...）：
     #    ToolRegistry 以后端的 source 属性为 key，传英文 id 会返回「未知数据源」，静默产出 0 个窗口。
     windows = agent.run(args.goal, sources=[backend.source], max_windows=args.max_windows)
 

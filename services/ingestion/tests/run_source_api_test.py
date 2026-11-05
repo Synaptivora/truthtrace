@@ -106,7 +106,7 @@ def main():
         need = {"id", "name", "authorized", "status", "last_sync", "count"}
         check("字段齐全", all(need <= set(s) for s in srcs),
               str([s["id"] for s in srcs]))
-        check("四渠道都在", {"mock", "dingtalk", "wechat", "feishu"} <= {s["id"] for s in srcs})
+        check("恰好三个渠道", {"mock", "dingtalk", "wechat"} == {s["id"] for s in srcs})
 
         print("\n=== 2) GET /source/status ===")
         st, body, _ = get("/source/status?source=" + urllib.parse.quote("钉钉"))

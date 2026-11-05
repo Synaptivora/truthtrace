@@ -16,7 +16,6 @@ Rollback: revert this commit together with dependent Next service-auth integrati
 
 Added bounded connection handling (16 threads), isolated /parse interpreter processes with a 30-second subprocess timeout (Python kills and waits on timeout), archive exclusive cross-process lock, 250 MiB archive quota and seven-day cleanup limited to managed archive filenames. Stale lock after a killed writer fails closed and requires inspection/removal; it cannot bypass quota. Upload download rejects symlinks.
 
-Migrated existing HTTP regressions to test-only Bearer credentials. Updated obsolete no-413/default-wildcard assertions to the new security contract. Source HTTP tests run a dedicated fixture overriding real-channel probes: no installed user channel client is contacted. Existing mock sync and repository DingTalk/Feishu demo CLI tests remain.
 
 Validation: `python services/ingestion/tests/run_all.py`: 14 passed, 0 failed (38 seconds); `python -X utf8 services/ingestion/tests/security_boundary_test.py`: 8 passed. These are deterministic/local-fixture tests, not live channel or model evaluation.
 

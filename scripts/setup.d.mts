@@ -11,7 +11,6 @@ export interface SetupChecks {
     user: string;
     ok: boolean;
   };
-  lark: { installed: boolean; version: string };
   python: { version: string; ok: boolean; missing: string[] };
   wam: { found: boolean; path: string; patched: boolean; localZips: string[] };
   keyCache: { path: string; exists: boolean; accounts: number };

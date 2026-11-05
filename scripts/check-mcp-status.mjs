@@ -43,11 +43,6 @@ try {
   await page.waitForTimeout(2500);
   console.log("微信状态框:", (await page.locator(".mcp-status").innerText()).replace(/\s+/g, " "));
 
-  // 飞书
-  await page.locator(".mcp-channel", { hasText: "飞书" }).click();
-  await page.waitForTimeout(2500);
-  console.log("飞书状态框:", (await page.locator(".mcp-status").innerText()).replace(/\s+/g, " "));
-  await page.screenshot({ path: "artifacts/session-switch/mcp-feishu.png" });
 } catch (e) {
   console.log("失败:", String(e).slice(0, 300));
 } finally {

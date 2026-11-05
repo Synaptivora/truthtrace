@@ -5,7 +5,7 @@
 与 services/ingestion/server.py 的 build_chat_content / build_chat_bundle 保持同一套约定：
   - 媒体/特殊类型插入内联标记：[图片@t: 名 见独立证据] / [文件:名@t 见独立证据] / [语音@t] / [转账 ¥x@t]
   - 图片产出独立 image 证据（data URL）；非图片媒体产出 text 占位证据（绝不伪造 image URL）
-  - source 由调用方显式传入（微信/钉钉/飞书），不替调用方猜平台
+  - source 由调用方显式传入（微信/钉钉），不替调用方猜平台
 """
 import base64
 import mimetypes

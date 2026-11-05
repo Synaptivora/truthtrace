@@ -3,9 +3,9 @@
 """方案 A · 工具注册与分发（Agent 可见的 5 个统一工具）。
 
 Agent（无论 Mock 还是 LLM）只看到这 5 个平台无关的工具；
-微信/钉钉/飞书各自实现 backend，新增渠道只加一个 backend，工具层不变。
+微信/钉钉各自实现 backend，新增渠道只加一个 backend，工具层不变。
 """
-from .backends import MockBackend, DingTalkBackend, WeChatBackend, FeishuBackend
+from .backends import MockBackend, DingTalkBackend, WeChatBackend
 
 
 class ToolRegistry:
@@ -113,12 +113,10 @@ class ToolRegistry:
 
 
 def build_backend(source: str, data_path: str | None) -> object:
-    if source in ("feishu", "飞书"):
-        return FeishuBackend()
     if source == "mock":
         return MockBackend()
     if source == "dingtalk":
         return DingTalkBackend()
     if source == "wechat":
         return WeChatBackend()
-    raise SystemExit(f"[!] 未知数据源 {source}，可选：mock / dingtalk / wechat / feishu")
+    raise SystemExit(f"[!] 未知数据源 {source}，可选：mock / dingtalk / wechat")

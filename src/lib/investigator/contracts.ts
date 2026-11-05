@@ -36,7 +36,7 @@ export type Ref = z.infer<typeof RefSchema>;
 export type Segment = { id: string; evidenceId: string; version: number; name: string; content: string; start: number; end: number; kind: string };
 export const ScopeSchema = z.object({
   allowImages: z.boolean().default(false),
-  sources: z.array(z.object({ source: z.enum(["wechat", "dingtalk", "feishu"]), handle: z.string().optional(), conversationIds: z.array(z.string().min(1)).min(1), start: z.string().min(1), end: z.string().min(1) }).refine(s=>Number.isFinite(Date.parse(s.start))&&Number.isFinite(Date.parse(s.end))&&Date.parse(s.start)<=Date.parse(s.end),"请提供有效且有序的时间范围")).default([]),
+  sources: z.array(z.object({ source: z.enum(["wechat", "dingtalk"]), handle: z.string().optional(), conversationIds: z.array(z.string().min(1)).min(1), start: z.string().min(1), end: z.string().min(1) }).refine(s=>Number.isFinite(Date.parse(s.start))&&Number.isFinite(Date.parse(s.end))&&Date.parse(s.start)<=Date.parse(s.end),"请提供有效且有序的时间范围")).default([]),
 });
 export const TaskInputSchema = z.object({ goal: z.string().trim().min(1).max(4000), mode: z.enum(["fact", "timeline", "deep"]).default("deep"), idempotencyKey: z.string().min(1).max(200), scope: ScopeSchema.default({ allowImages: false, sources: [] }) });
 export type TaskState = "queued" | "running" | "waiting_user" | "paused" | "completed" | "failed" | "cancelled";

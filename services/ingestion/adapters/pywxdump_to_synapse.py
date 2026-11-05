@@ -254,7 +254,7 @@ def main():
 
     with open(chat_path, "w", encoding="utf-8") as f:
         # 写成信封而不是裸数组：/parse 靠信封里的 source 才能把来源认回「微信」，
-        # 裸数组会被标成「用户上传」（钉钉/飞书适配器也是同一套信封规范）。
+        # 裸数组会被标成「用户上传」（钉钉适配器也是同一套信封规范）。
         json.dump({"source": "微信", "messages": chat}, f, ensure_ascii=False, indent=2)
     with open(media_path, "w", encoding="utf-8") as f:
         json.dump(media, f, ensure_ascii=False, indent=2)

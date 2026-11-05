@@ -19,7 +19,7 @@
         → { source, synced, conversations, messages, evidences: [Evidence...] }
 
 精度口径（与工具真实能力一致，别在 UI 上吹）：
-    · 会话粒度：钉钉 openConversationId / 微信 talker / 飞书 chat_id，可逐会话多选；
+    · 会话粒度：钉钉 openConversationId / 微信 talker，可逐会话多选；
     · 时间粒度：底层记录精确到秒（钉钉 createTime、微信 create_time），
       前端按「日期 + 时分」筛选，A 侧按字符串时间戳过滤，不改变记录本身。
 
@@ -42,7 +42,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from .backends import MockBackend, DingTalkBackend, WeChatBackend, FeishuBackend
+from .backends import MockBackend, DingTalkBackend, WeChatBackend
 from .tools import ToolRegistry
 from .agent import MockAgent, OpenAIAgent
 from .config import llm_config_from_env, has_llm_key, OpenAICompatibleClient
@@ -55,17 +55,15 @@ ALIASES = {
     "mock": "mock", "演示": "mock", "demo": "mock",
     "钉钉": "dingtalk", "dingtalk": "dingtalk", "dws": "dingtalk",
     "微信": "wechat", "wechat": "wechat", "weixin": "wechat",
-    "飞书": "feishu", "feishu": "feishu", "lark": "feishu",
 }
 
 # 展示名：Evidence.source 用这个（B 的 prompt 会原样显示给用户）
-DISPLAY = {"mock": "mock", "dingtalk": "钉钉", "wechat": "微信", "feishu": "飞书"}
+DISPLAY = {"mock": "mock", "dingtalk": "钉钉", "wechat": "微信"}
 
 CATALOG = [
     {"id": "mock", "name": "演示数据源", "auth": "none"},
     {"id": "dingtalk", "name": "钉钉", "auth": "dws 扫码登录"},
     {"id": "wechat", "name": "微信", "auth": "手机扫码抓 SQLCipher 密钥"},
-    {"id": "feishu", "name": "飞书", "auth": "lark-cli 授权"},
 ]
 
 # 单条 chat 证据的正文预算，默认值与 server.py 的 MAX_CONTENT_CHARS 对齐：
@@ -100,7 +98,7 @@ def normalize_source(raw: str | None) -> str:
 
 def _backend_cls(source_id: str):
     return {"mock": MockBackend, "dingtalk": DingTalkBackend,
-            "wechat": WeChatBackend, "feishu": FeishuBackend}.get(source_id)
+            "wechat": WeChatBackend}.get(source_id)
 
 
 # 上传的渠道导出文件落在独立目录：与「超限原件下载」的 UPLOAD_DIR 分开，
@@ -248,7 +246,7 @@ class SourceService:
             return {}
 
     def list_sources(self) -> dict:
-        # 三个渠道的探测互相独立（dws 子进程 / 开一次微信库 / lark-cli 子进程），
+        # 渠道探测互相独立（dws 子进程 / 开一次微信库），
         # 串行要 3~6 秒，前端面板一直空转；并行后总耗时≈最慢的一个渠道（约 1~2 秒）。
         # _probe_cached 各自加锁读写缓存、互不共享可变状态，并发安全。
         sids = [c["id"] for c in CATALOG]
@@ -408,37 +406,6 @@ class SourceService:
             return {"authorized": True, "status": "ready",
                     "detail": f"密钥可用：可读 {info['sessions']} 个会话"
                               f"（账号 {info['account'] or '未知'}）"}
-        if sid == "feishu":
-            lark = shutil.which("lark-cli")
-            if not lark:
-                return {"authorized": False, "status": "need_auth",
-                        "action": "lark-cli auth login",
-                        "hint": "未检测到 lark-cli；安装并授权后可拉取飞书会话"}
-            # 装了 lark-cli ≠ 能读飞书会话：lark-cli 有 bot / user 两套身份，
-            # bot 身份只能调租户 API，读个人会话必须要 user 身份。
-            # 只看「命令存在」就会把「只有 bot、没登录过个人账号」误报成已就绪。
-            try:
-                r = subprocess.run([lark, "auth", "status"], capture_output=True,
-                                   timeout=10, text=True)
-                data = json.loads((r.stdout or "").strip() or "{}")
-            except Exception:  # noqa: BLE001
-                return {"authorized": True, "status": "ready",
-                        "detail": "lark-cli 可用（该版本读不到授权状态，未校验用户身份）"}
-            idents = data.get("identities") or {}
-            user = idents.get("user") or {}
-            bot = idents.get("bot") or {}
-            user_ok = str(user.get("status") or "") == "ready" or bool(user.get("available"))
-            bot_ok = str(bot.get("status") or "") == "ready" or bool(bot.get("available"))
-            if user_ok:
-                who = str(data.get("userName") or data.get("user_name") or "").strip()
-                return {"authorized": True, "status": "ready",
-                        "detail": f"lark-cli 用户身份已授权{('：' + who) if who else ''}"}
-            note = str(data.get("note") or "").strip()
-            return {"authorized": False, "status": "need_auth",
-                    "action": "lark-cli auth login",
-                    "detail": "lark-cli 只有机器人身份，读不到个人会话" if bot_ok else "lark-cli 未授权",
-                    "hint": (f"lark-cli 提示：{note}" if note
-                             else "执行 `lark-cli auth login` 补一次用户身份（扫码即可）")}
         return {"authorized": False, "status": "unsupported", "detail": f"未支持的渠道 {sid}"}
 
     # ---------------------------------------------------------------- 本人身份
@@ -1628,7 +1595,7 @@ class SourceService:
             agent = (OpenAIAgent(OpenAICompatibleClient(cfg), reg) if use_llm
                      else MockAgent(reg))
 
-            # ToolRegistry 以后端的 source 属性为 key（钉钉/微信/飞书/mock），
+            # ToolRegistry 以后端的 source 属性为 key（钉钉/微信/mock），
             # 传英文 id 会让 registry.call 返回「未知数据源」，这里必须传 backend.source。
             windows = agent.run(goal or DEFAULT_GOAL, sources=[backend.source],
                                 max_windows=max_windows)

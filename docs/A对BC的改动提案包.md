@@ -20,7 +20,7 @@
 |---|---|---|
 | 解析服务 | `services/ingestion/server.py` | 可运行，`python server.py --port 8000` |
 | 依赖声明 | `services/ingestion/requirements.txt` | `pip install -r requirements.txt` |
-| 渠道适配器 | `services/ingestion/adapters/` | 钉钉 / 微信 / 飞书 / pywxdump / 媒体解码 |
+| 渠道适配器 | `services/ingestion/adapters/` | 钉钉 / 微信 / pywxdump / 媒体解码 |
 | AI 智能取数（方案 A） | `services/ingestion/ai_ingest/` | 5 工具 + agent loop，mock 可无凭证演示 |
 | 测试 | `services/ingestion/tests/` | 12 套，全 PASS |
 | 测试数据 | `services/ingestion/testdata/` | 构造数据（张三/王五催款场景），可提交 |
@@ -108,7 +108,7 @@
 ### P0-4　B 新增 `/api/source/*` 桥接时，不要把 8MB 检查复制过去
 
 - **背景（回复「渠道取数会不会被 8MB 筛掉」）**：**不会。**
-  渠道取数（钉钉/微信/飞书）的媒体走 A 的 `build_media_evidence`，
+  渠道取数（钉钉/微信）的媒体走 A 的 `build_media_evidence`，
   **不经过 B 的 `parser.ts`**，因此天然不受 8MB 影响——这是对的：
   8MB 量的是「用户上传的原件」，而聊天媒体的原始体积同样与处理后体积无关。
 - **风险**：B 按 §4 加 `/api/source/*` 桥接路由时，若照抄
@@ -169,7 +169,6 @@
 | 3-2 | 关联/分组字段 | B + C | 是否给 `Evidence` 加 `groupId` / `relatedTo` | 不加也能跑，靠内联标记表达关联 |
 | 3-3 | `doc` 原生 kind | A+B+C | Word/Excel 是否要有独立 kind | A 已降级 `kind=text`，格式靠 `name` 后缀体现 |
 | 3-4 | 案件级分组 | A+B+C | 一次分析多份证据的分组协议 | 本期不做，多次上传即可 |
-| 3-5 | source 词表 | B + C | 取值约定：`微信`/`钉钉`/`飞书`/`用户上传`/`mock` | 自由字符串，不碰 `contracts.ts` |
 | 3-6 | 数据源连接面板 | **C 主负责** + B 桥接 | 见下 §4 | A 已提供 `/source/*`，C 不接即为死代码，零影响 |
 
 ---
@@ -223,7 +222,6 @@ POST /source/sync      {"source":"mock"}
 
 约束：
 
-- 渠道名支持中英文别名（`钉钉`/`dingtalk`/`dws`、`微信`/`wechat`、`飞书`/`feishu`），归一到英文 id。
 - `sync` 受 single-flight 锁保护，并发请求返回 **409 `{"status":"busy"}`**，不会二次执行。
 - `sync` 产出的 `Evidence.source` 是**渠道名**，不会落回「用户上传」。
 - 扫码类授权**必须人做**（`dws auth login`、微信密钥抓取），A 只做探测并返回 `need_auth + action + hint`，
