@@ -12,7 +12,7 @@
 .mcp-lead code,.mcp-action code,.mcp-cmd code,.mcp-endpoints code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--agent-small-size)}
 .mcp-notice{margin:0 0 12px;padding:8px 10px;border:1px solid #d8a98c;background:#f8e3d5;color:#8c3a26;border-radius:8px;font-size:var(--agent-small-size);line-height:1.6}
 
-.mcp-channels{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.mcp-channels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
 .mcp-empty{grid-column:1/-1;font-size:var(--agent-small-size);color:#8a7457}
 .mcp-channel-skeleton{display:flex;align-items:center;gap:7px;padding:8px 10px;min-height:52px;border:1px solid #d1bb96;border-radius:9px;background:#fff8e9}
 .mcp-channel-skeleton .sk-dot{width:8px;height:8px;border-radius:50%;background:#d9c6a5;flex-shrink:0}
@@ -101,7 +101,11 @@
 .mcp-method.post{background:#e8dcc2;color:#7a5c2c}
 .mcp-endpoints em{font-style:normal;color:#8a7457;font-size:var(--agent-small-size)}
 
-@media(max-width:550px){.mcp-channels{grid-template-columns:1fr}}
+@media(max-width:550px){
+  .mcp-channel,.mcp-channel-skeleton{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 6px;padding:7px}
+  .mcp-channel em{grid-column:2;white-space:normal}
+  .mcp-channel-skeleton .sk-badge{display:none}
+}
 
 /* ---- 本机工具一键配置（setup-tools.tsx）-------------------------------- */
 .tt-setup{margin:12px 0;border:1px solid #d5bd96;border-radius:9px;background:#fbf3e4;padding:10px 11px;min-width:0}

@@ -43,6 +43,7 @@ type SyncResp = {
 };
 
 type Step = { label: string; cmd?: string; note?: string };
+const CHANNEL_ORDER = ["mock", "wechat", "dingtalk"];
 
 const STATUS_LABEL: Record<string, string> = {
   ready: "已就绪",
@@ -75,10 +76,6 @@ const GUIDES: Record<string, { intro: string; steps: Step[] }> = {
       { label: "缓存位置（可用 SYNAPSE_WECHAT_KEY_CACHE 覆盖）", note: "%LOCALAPPDATA%\\Synapse\\wechat_db_keys.json" },
       { label: "导出 JSON 后，填下方「导出文件绝对路径」再同步", note: "A 会归一化为 1 条 chat + N 条媒体证据" },
     ],
-  },
-  feishu: {
-    intro: "通过 lark-cli 授权取数。探测会读 lark-cli 的 bot / user 两种身份：只有 bot 身份调得动租户 API，读不到个人会话，必须补一次 user 登录。",
-    steps: [{ label: "安装并授权", cmd: "lark-cli auth login", note: "授权后 `lark-cli auth status` 里 user 身份应为 ready" }],
   },
   mock: {
     intro: "内置演示数据，无需任何凭证，可直接同步体验整条链路。",
@@ -118,9 +115,9 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
         setListError(true);
         return;
       }
-      const list = Array.isArray(data.sources) ? data.sources : [];
+      const list: SourceItem[] = Array.isArray(data.sources) ? data.sources : [];
       gotList.current = true;
-      setSources(list);
+      setSources(CHANNEL_ORDER.flatMap(id => list.filter(item => item.id === id)));
       setNotice("");
       setListError(false);
     } catch {
@@ -236,7 +233,7 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
     <section className="mcp-guide" aria-label="聊天来源连接">
       <header className="mcp-head">
         <button onClick={onClose} aria-label="返回对话"><ArrowLeft size={18} /></button>
-        <div><strong>聊天来源</strong><small>微信、钉钉与飞书</small></div>
+        <div><strong>聊天来源</strong><small>演示数据源、微信与钉钉</small></div>
       </header>
 
       <div className="mcp-body">
@@ -251,14 +248,14 @@ export function McpGuide({ onClose }: { onClose: () => void }) {
         <div className="mcp-channels">
           {sources.length === 0 && !listError && (
             <>
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className="mcp-channel-skeleton" aria-hidden="true">
+              {CHANNEL_ORDER.map(id => (
+                <div key={id} className="mcp-channel-skeleton" aria-hidden="true">
                   <span className="sk-dot" />
                   <span className="sk-lines"><i /><i /></span>
                   <span className="sk-badge" />
                 </div>
               ))}
-              <span className="mcp-empty" role="status">正在现场探测渠道（dws auth status、开一次微信库、lark-cli auth status，三路并行），约 1~2 秒…</span>
+              <span className="mcp-empty" role="status">正在检测渠道连接状态…</span>
             </>
           )}
           {sources.length === 0 && listError && (

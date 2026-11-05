@@ -5,7 +5,7 @@
 .agent-panel *{box-sizing:border-box}.agent-panel button{cursor:pointer;font:inherit}.agent-panel button:disabled{opacity:.5;cursor:not-allowed}
 .agent-panel button:focus-visible,.agent-panel input:focus-visible,.agent-panel textarea:focus-visible,.agent-panel select:focus-visible,.app-settings-trigger:focus-visible,.app-settings-panel :focus-visible{outline:2px solid #a17b40;outline-offset:3px}
 .agent-panel:focus,.app-settings-panel:focus{outline:none}
-.agent-header{display:flex;align-items:center;gap:12px;flex-shrink:0;padding:18px 22px 14px;background:#49382b;color:#fff0d1}
+.agent-header{display:flex;align-items:center;gap:12px;flex-shrink:0;padding:18px 22px 14px;background:#49382b;color:#fff0d1;border-radius:17px 17px 0 0}
 .agent-header>div{flex:1;min-width:0}.agent-header strong{font-size:18px;letter-spacing:-.3px}.agent-header small{display:block;margin-top:3px;font-size:var(--agent-small-size);color:#d1bda0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .agent-header button,.agent-scope button,.agent-source button{border:0;background:transparent;color:inherit;display:grid;place-items:center;padding:7px;border-radius:8px}
 .agent-header button:hover{background:#ffffff10}
@@ -23,6 +23,9 @@
 .agent-compose{flex-shrink:0;padding:14px 20px;border-top:1px solid #d9c7a6;background:#f2e7d2}.agent-compose textarea{display:block;width:100%;resize:vertical;max-height:140px;min-height:76px;background:#fffaf1;border:1px solid #cbb48e;border-radius:10px;padding:12px;font:inherit;color:#493c2e}.agent-compose textarea::placeholder{color:#a28d72}
 .agent-compose>div{display:flex;align-items:center;justify-content:space-between;margin:9px 0}.agent-compose small{font-size:var(--agent-small-size);color:#7d6a51;line-height:1.6}.agent-compose>small{display:block;font-size:11px}
 .agent-compose button,.agent-test{display:flex;align-items:center;justify-content:center;gap:7px;background:#654d32;color:#fff1d3;border:1px solid #654d32;border-radius:8px;padding:9px 16px}.agent-compose button:hover:not(:disabled),.agent-test:hover:not(:disabled){background:#553f28}.agent-vision{display:flex;align-items:center;gap:7px;margin-bottom:10px;font-size:var(--agent-small-size)}
+.agent-test{display:inline-flex;margin:6px 6px 6px 0;vertical-align:middle}
+.agent-test:active:not(:disabled){background:#493522}
+.agent-panel .agent-test:disabled{opacity:1;background:#79654c;border-color:#79654c}
 .agent-progress{font-size:var(--agent-small-size);color:#806036;padding:8px}.agent-error{padding:10px 20px;margin:0;color:#994737;background:#f2e3d9;font-size:var(--agent-small-size)}
 .agent-settings{flex:1;min-height:0;overflow-y:auto;padding:24px;background:linear-gradient(145deg,#f7edda,#f3e7d3);scrollbar-width:thin;scrollbar-color:#bca783 transparent}
 .agent-section-title{margin-bottom:22px}.agent-section-title h2{margin:0 0 6px;font-size:22px;font-family:system-ui,"Microsoft YaHei",sans-serif;font-weight:700;color:#49382b}.agent-section-title p{margin:0!important;color:#8a7457}
@@ -44,7 +47,9 @@
 .agent-panel .investigator-embedded{position:relative;inset:auto;flex:1;min-height:0;width:100%;max-height:none;overflow-y:auto;border:0;border-radius:0;box-shadow:none;padding:20px}
 .agent-panel .investigator-embedded header{position:static;padding-top:0}
 .agent-route-note{padding:8px 20px;background:#eee2cc;font-size:11px}
-.agent-settings>button{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;margin:6px 6px 6px 0;border:1px solid #c8b18b;border-radius:9px;background:#fffaf0;color:#5c4428}
+.agent-settings>button:not(.agent-test),.agent-settings-actions>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;border:1px solid #c8b18b;border-radius:9px;background:#fffaf0;color:#5c4428}
+.agent-settings>button:not(.agent-test){margin:6px 6px 6px 0;vertical-align:middle}
+.agent-settings-actions{display:flex;align-items:stretch;flex-wrap:wrap;gap:8px;margin-top:16px}
 .agent-panel .app-settings-inline{position:static;width:100%;max-width:none;max-height:none;padding:12px 0;border:0;box-shadow:none}
 .agent-settings>p{overflow-wrap:anywhere}
 .agent-nav{overflow-x:auto}.agent-nav button{flex-shrink:0}
