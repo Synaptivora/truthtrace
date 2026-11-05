@@ -6,7 +6,7 @@ vi.mock("../scripts/setup.mjs", () => ({
 }));
 vi.mock("@/lib/ingestion/service",()=>({ensureIngestion:vi.fn(async()=>{})}));
 import { GET, POST } from "../src/app/api/setup/route";
-import { detect, runSetup } from "../scripts/setup.mjs";
+import { detect, runSetup, actionDingtalkLogin } from "../scripts/setup.mjs";
 
 beforeEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); vi.stubEnv("TRUTHTRACE_MACHINE_TOKEN","t".repeat(64)); });
 function request(host = "localhost:3000", extra = {}, body?: string) {
@@ -54,7 +54,39 @@ it("does not expose raw setup job logs, paths or exceptions",async()=>{
 it('returns structured device URL for the existing QR flow, never arbitrary logs',async()=>{
  const state=globalThis as typeof globalThis & {__ttSetupJobs:Map<string,unknown>};
  const authUrl='https://login.dingtalk.com/oauth2/device/verify.htm?user_code=TEST';
- state.__ttSetupJobs.set('auth-fixture',{id:'auth-fixture',action:'login-dingtalk',status:'running',steps:[],lines:['private-token',authUrl],startedAt:1});
+ state.__ttSetupJobs.set('auth-fixture',{id:'auth-fixture',action:'install',status:'running',steps:[],lines:['private-token',authUrl],startedAt:1});
  try{const response=await GET(new Request('http://localhost:3000/api/setup?job=auth-fixture',{headers:{host:'localhost:3000',authorization:`Bearer ${'t'.repeat(64)}`}}));const data=await response.json();expect(data.authUrl).toBe(authUrl);expect(JSON.stringify(data.lines)).not.toContain('private-token');}
  finally{state.__ttSetupJobs.delete('auth-fixture');}
+});
+
+async function installAndWait() {
+ const response = await POST(request("localhost:3000", {}, '{"action":"install"}'));
+ expect(response.status).toBe(200);
+ const { jobId } = await response.json();
+ const state=globalThis as typeof globalThis & {__ttSetupJobs:Map<string,{status:string}>};
+ await vi.waitFor(()=>expect(state.__ttSetupJobs.get(jobId)?.status).not.toBe('running'));
+ return state.__ttSetupJobs.get(jobId);
+}
+it('one-click setup starts the service and skips login for a valid account', async()=>{
+ vi.mocked(runSetup).mockResolvedValue({status:'ok',after:{ready:true,checks:{dws:{ok:true}}}} as Awaited<ReturnType<typeof runSetup>>);
+ expect((await installAndWait())?.status).toBe('ok');
+ const {ensureIngestion}=await import('@/lib/ingestion/service');
+ expect(ensureIngestion).toHaveBeenCalledOnce();
+ expect(actionDingtalkLogin).not.toHaveBeenCalled();
+});
+it('one-click setup continues to device authorization when needed',async()=>{
+ vi.mocked(runSetup).mockResolvedValue({status:'ok',after:{ready:true,checks:{dws:{ok:false}}}} as Awaited<ReturnType<typeof runSetup>>);
+ vi.mocked(actionDingtalkLogin).mockResolvedValue({ok:true,output:'',note:''});
+ expect((await installAndWait())?.status).toBe('ok');
+ expect(actionDingtalkLogin).toHaveBeenCalledOnce();
+});
+it('cancelled authorization is not reported as configured',async()=>{
+ vi.mocked(runSetup).mockResolvedValue({status:'ok',after:{ready:true,checks:{dws:{ok:false}}}} as Awaited<ReturnType<typeof runSetup>>);
+ vi.mocked(actionDingtalkLogin).mockResolvedValue({ok:false,output:'',note:''});
+ expect((await installAndWait())?.status).toBe('failed');
+});
+it('failed installation does not initiate authorization',async()=>{
+ vi.mocked(runSetup).mockResolvedValue({status:'failed',after:{ready:false}} as Awaited<ReturnType<typeof runSetup>>);
+ expect((await installAndWait())?.status).toBe('failed');
+ expect(actionDingtalkLogin).not.toHaveBeenCalled();
 });

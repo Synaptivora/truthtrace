@@ -1,9 +1,7 @@
-import { randomBytes } from 'node:crypto';
+import { localSecret } from './local-secrets.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
-import { detect, runSetup } from './setup.mjs';
+import { detect, runSetup, toolEnvironment } from './setup.mjs';
 
 // 一键启动本机全链路：Next 前端 + A 端证据解析服务(Python) + 自主调查员后台。
 // 用法：npm run dev:local（开发）/ npm run start:local（生产构建）。
@@ -47,25 +45,23 @@ if (process.env.SYNAPSE_AUTO_SETUP === '1' && process.env.SYNAPSE_SKIP_AUTO_SETU
 }
 
 const envLocal = loadEnvLocal();
-const configuredToken = envLocal.TRUTHTRACE_INGESTION_TOKEN || process.env.TRUTHTRACE_INGESTION_TOKEN;
+const configuredToken = process.env.TRUTHTRACE_INGESTION_TOKEN || envLocal.TRUTHTRACE_INGESTION_TOKEN;
 if (configuredToken && configuredToken.length < 32) {
   console.error('[local] TRUTHTRACE_INGESTION_TOKEN 至少需要 32 个字符，请修正后重新启动。');
   process.exit(1);
 }
-const INGESTION_URL = envLocal.INGESTION_SERVICE_URL
-  || process.env.INGESTION_SERVICE_URL || 'http://127.0.0.1:8000';
+const INGESTION_URL = process.env.INGESTION_SERVICE_URL
+  || envLocal.INGESTION_SERVICE_URL || 'http://127.0.0.1:8000';
 const INGESTION_PORT = new URL(INGESTION_URL).port || '80';
-const env = { ...process.env, ...envLocal, INGESTION_SERVICE_URL: INGESTION_URL, INGESTION_HOST: new URL(INGESTION_URL).hostname.replace(/^\[|\]$/g, ""), TRUTHTRACE_INGESTION_TOKEN: envLocal.TRUTHTRACE_INGESTION_TOKEN || process.env.TRUTHTRACE_INGESTION_TOKEN || randomBytes(32).toString("hex"), TRUTHTRACE_LOCAL_BOOTSTRAP: "1", TRUTHTRACE_SESSION_SECRET: randomBytes(32).toString("hex") };
-
-// 全局 npm 装不上时，setup.mjs 会把工具装到 ~/.synapse/tools/npm；
-// 把它的 .bin 加进 PATH，Python 的 shutil.which("dws") 才能找到。
-const toolsBin = join(homedir(), '.synapse', 'tools', 'npm', 'node_modules', '.bin');
-if (existsSync(toolsBin)) {
-  const pathKey = Object.keys(env).find(key => key.toLowerCase() === 'path') || 'PATH';
-  const searchPath = env[pathKey] || '';
-  for (const key of Object.keys(env)) if (key.toLowerCase() === 'path') delete env[key];
-  env[pathKey] = toolsBin + delimiter + searchPath;
-}
+const startupEnv = toolEnvironment({ ...envLocal, ...process.env });
+const env = toolEnvironment({
+  ...startupEnv,
+  INGESTION_SERVICE_URL: INGESTION_URL,
+  INGESTION_HOST: new URL(INGESTION_URL).hostname.replace(/^\[|\]$/g, ""),
+  TRUTHTRACE_INGESTION_TOKEN: localSecret('TRUTHTRACE_INGESTION_TOKEN', startupEnv),
+  TRUTHTRACE_LOCAL_BOOTSTRAP: "1",
+  TRUTHTRACE_SESSION_SECRET: localSecret('TRUTHTRACE_SESSION_SECRET', startupEnv),
+});
 
 const children = [];
 

@@ -49,7 +49,7 @@ function snapshot(job: Job) {
   return {
     id: job.id,
     action: job.action,
-    authUrl: job.action === "login-dingtalk" && job.status === "running" ? authUrlFromLines(job.lines) : undefined,
+    authUrl: ["login-dingtalk", "install"].includes(job.action) && job.status === "running" ? authUrlFromLines(job.lines) : undefined,
     status: job.status,
     steps: job.steps.map((step,index)=>({id:`step-${index}`,index,status:step.status,label:`配置步骤 ${index+1}`,detail:step.status==="failed"?"步骤失败，请在本机检查配置":"状态已更新"})),
     lines: job.lines.length ? ["执行进度已更新；原始日志仅限本机查看。"] : [],
@@ -116,8 +116,15 @@ async function rawPOST(request: Request) {
           if (typeof step.index === "number") job.steps[step.index] = { ...step };
         });
         const failed = report.status !== "ok" || !report.after.ready;
+        if (!failed) {
+          await ensureIngestion();
+          if (!report.after.checks.dws.ok) {
+            const login = await actionDingtalkLogin(line => job.lines.push(line));
+            if (!login.ok) throw new Error("钉钉授权未完成，请重试扫码授权");
+          }
+        }
         job.status = failed ? "failed" : "ok";
-        job.note = failed ? "部分步骤失败，请查看日志" : "配置完成，可刷新渠道状态";
+        job.note = failed ? "部分步骤失败，请查看日志" : "工具、材料服务与钉钉授权已就绪";
         job.ok = !failed;
       } else {
         job.lines.push("正在准备材料读取服务…");await ensureIngestion();job.lines.push("材料读取服务已就绪");
