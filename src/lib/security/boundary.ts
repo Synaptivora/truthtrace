@@ -1,20 +1,9 @@
+import { localSecret } from '../../../scripts/local-secrets.mjs';
+export { localSecret };
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { safeError } from './safe-error';
 import { requestBodyLimit } from '../request-limits';
 
-export function localSecret(name = 'TRUTHTRACE_SESSION_SECRET'): string {
-  const configured = process.env[name];
-  if (configured && configured.length >= 32) return configured;
-  const directory = resolve(/* turbopackIgnore: true */ process.env.TRUTHTRACE_DATA_DIR || '.truthtrace');
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const path = join(directory, `${name.toLowerCase()}.secret`);
-  try { writeFileSync(path, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 }); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
-  const secret = readFileSync(path, 'utf8');
-  if (secret.length < 32) throw Error('Invalid local secret');
-  return secret;
-}
 export function equal(a: string, b: string) { return Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b)); }
 export function trusted(request: Request) {
   if ((process.env.TRUTHTRACE_MODE || 'local') !== 'local') return false;
@@ -53,7 +42,7 @@ export function secureRoute(handler:(request:Request)=>Promise<Response>):(reque
 export function secureRoute<C>(handler:(request:Request,context:C)=>Promise<Response>):(request:Request,context:C)=>Promise<Response>;
 export function secureRoute<C>(handler: (request: Request, context: C) => Promise<Response>) {
   return async (request: Request, context: C): Promise<Response> => {
-    const fail = (status:number) => Response.json({error:status===413?`请求体超过 ${requestBodyLimit(new URL(request.url).pathname,request.headers.get('content-type')||'')/1024/1024} MiB；请缩短时间范围或减少图片、附件后分批导入。已保存材料不受影响。`:'请求未获允许或处理失败',code:`HTTP_${status}`,traceId:randomBytes(8).toString('hex'),retryable:status===429},{status,headers:{'Cache-Control':'no-store'}});
+    const fail = (status:number) => Response.json({error:status===413?`请求体超过 ${requestBodyLimit(new URL(request.url).pathname,request.headers.get('content-type')||'')/1024/1024} MiB；请缩短时间范围或减少图片、附件后分批导入。已保存材料不受影响。`:status===403?'页面连接已过期或请求未获允许，请刷新页面后重试':'请求未获允许或处理失败',code:`HTTP_${status}`,traceId:randomBytes(8).toString('hex'),retryable:status===429},{status,headers:{'Cache-Control':'no-store'}});
     let reserved=0;let acquired=false;
     const release=()=>{if(acquired){activeRequests--;reservedBytes-=reserved;acquired=false;}};
     try {

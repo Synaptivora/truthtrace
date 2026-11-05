@@ -46,7 +46,7 @@ export function SetupTools({ onDone }: { onDone?: () => void }) {
   const refresh = useCallback(async () => {
     try {
       const response = await fetch("/api/setup", { cache: "no-store" });
-      if (!response.ok) throw new Error(`检测失败（${response.status}）`);
+      if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || `检测失败（${response.status}）`); }
       setDetect(await response.json() as Detect);
       setError("");
     } catch (cause) {
@@ -117,8 +117,8 @@ export function SetupTools({ onDone }: { onDone?: () => void }) {
       </div>
 
       <p className="tt-setup-lead">
-        项目启动时会自动检测并补装缺失工具；也可点下面的按钮立即配置。
-        装包、依赖、源码、环境变量全自动，<strong>只有扫码和首次取密钥需要本人确认</strong>。
+        点击下方按钮，自动安装缺失工具、启动读取服务并检查钉钉授权。
+        需要钉钉授权时会显示官方授权链接；<strong>只有扫码和首次取密钥需要本人确认</strong>。
       </p>
 
       <div className="tt-setup-chips">
@@ -127,7 +127,7 @@ export function SetupTools({ onDone }: { onDone?: () => void }) {
             <i data-ok={chip.ok} />{chip.label}<em>{chip.note}</em>
           </span>
         ))}
-        {!c && <span className="tt-setup-loading"><Loader2 size={12} />正在检测本机工具…</span>}
+        {!c && !error && <span className="tt-setup-loading"><Loader2 size={12} />正在检测本机工具…</span>}
       </div>
 
       <div className="tt-setup-actions">
@@ -158,7 +158,7 @@ export function SetupTools({ onDone }: { onDone?: () => void }) {
               ))}
             </ol>
           )}
-          {url && job.action === "login-dingtalk" && (
+          {url && ["login-dingtalk", "install"].includes(job.action) && (
             <a className="tt-login-link" href={url} target="_blank" rel="noreferrer">
               打开钉钉授权页 <ExternalLink size={12} />
             </a>
