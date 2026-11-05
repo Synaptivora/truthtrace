@@ -272,6 +272,7 @@
 
 /* 读取前的会话勾选：清单只列标题与条数，勾中的才会被真正读取 */
 .ci-sess { margin-top: 14px; border: 1px solid #ffffff14; border-radius: 12px; background: #ffffff05; overflow: hidden; }
+.ci-sess > .ci-error { margin: 10px 12px; padding: 8px 10px; border: 1px solid #e79c8d40; border-radius: 8px; background: #e79c8d0d; color: #f0b5a8; overflow-wrap: anywhere; }
 .ci-sess-head { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid #ffffff0f; background: #ffffff06; }
 .ci-sess-all { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: #e8d7b7; cursor: pointer; }
 .ci-sess-all input, .ci-sess-row input { accent-color: #d9a364; }

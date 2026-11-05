@@ -20,7 +20,7 @@ _PNG_1PX = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
 )
 
-# adapters/（钉钉/微信/飞书适配器）与本包同级，加进 sys.path 才能懒加载
+# adapters/（钉钉/微信适配器）与本包同级，加进 sys.path 才能懒加载
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "adapters")
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -162,24 +162,6 @@ class DingTalkBackend(SourceBackend):
             "id": c.get("openConversationId") or c["conversation"],
             "title": c["conversation"],
             "source": "钉钉",
-            "records": c["messages"],
-        } for c in convs]
-        self._index()
-
-
-class FeishuBackend(SourceBackend):
-    source = "飞书"
-
-    def load(self, data_path: str | None = None):
-        if not data_path or not os.path.isfile(data_path):
-            raise SystemExit(f"[!] 飞书后端需要 lark-cli 导出的 messages.json：--source-data {data_path or ''}")
-        import feishu_to_synapse as fts  # 懒加载
-        tmp = tempfile.mkdtemp(prefix="synapse_fs_")
-        convs = fts.convert(data_path, tmp, download_media=False)
-        self.conversations = [{
-            "id": c.get("chat_id") or c["conversation"],
-            "title": c["conversation"],
-            "source": "飞书",
             "records": c["messages"],
         } for c in convs]
         self._index()

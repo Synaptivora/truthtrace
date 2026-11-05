@@ -21,10 +21,10 @@
 | ---------- | ------- | ------------------------------------------------ |
 | `id`       | string  | 非空（建议 `uuid`）                                    |
 | `name`     | string  | 非空（原始文件名）                                        |
-| `kind`     | enum    | **只能是** `text` / `chat` / `image` / `pdf` 之一。语义 = 「B 的消费通道」，**不是来源平台**：微信/钉钉/飞书的聊天一律 `chat`，Word/Excel/PPT 抽文本后一律 `text`     |
+| `kind`     | enum    | **只能是** `text` / `chat` / `image` / `pdf` 之一。语义 = 「B 的消费通道」，**不是来源平台**：微信/钉钉的聊天一律 `chat`，Word/Excel/PPT 抽文本后一律 `text`     |
 | `mimeType` | string  | 非空                                               |
 | `content`  | string  | 非空。`image` 放 `data:<mime>;base64,...`；其余放提取出的纯文本 |
-| `source`   | string? | 选填，**来源渠道**（微信 / 钉钉 / 飞书 / 用户上传）；不表示文件格式，格式由 `name` 后缀 + `mimeType` 表达                                 |
+| `source`   | string? | 选填，**来源渠道**（微信 / 钉钉 / 用户上传）；不表示文件格式，格式由 `name` 后缀 + `mimeType` 表达                                 |
 
 - 服务返回形态：`{ "evidence": { ... } }`，字段名必须是 `evidence`（TruthTrace 的 `parser.ts` 用 `result.evidence ?? result` 取值）。
 - **`kind` / `source` / `name` 三者正交**：`kind` 管「B 怎么消费」（文本 or 图像），`source` 管「从哪来」（平台），`name`+`mimeType` 管「原始格式」。三者不要互相顶替。
@@ -90,7 +90,6 @@ python check_evidence.py --url http://localhost:8000/parse --upload sample.pdf -
 
 | 通道 | 谁在跑 | 产物形态 | `source` 怎么定 | 实测 |
 |---|---|---|---|---|
-| 平台适配器 | `wechat_aimemory_to_synapse.py`（微信）/ `dingtalk_to_synapse.py` / `feishu_to_synapse.py` | `<会话名>.json` 信封 `{source, messages[]}` + `<会话名>.records.json` 裸数组 | 适配器**显式**传 `source`（微信/钉钉/飞书），信封里也写一份 | 钉钉 6 条消息 → chat + image 两条，source=钉钉 ✅ |
 | 用户直接提供（文件） | C 上传 → B 转发 → `/parse` | 原始文件 | 无信封 → `用户上传`；带信封（`{"source":"钉钉"}`）→ 识别为 `钉钉` | 上传钉钉信封 `.json` → source=钉钉 ✅ |
 | 用户直接提供（手存文本） | 直接 `/parse`，可选 `?source=` | `.txt` 对话稿 | 文件名里的平台名**不**当作来源；要标平台须调 `?source=` | `/parse?source=钉钉` → 钉钉 ✅ |
 
@@ -236,7 +235,6 @@ python check_evidence.py --url http://localhost:8000/parse --upload sample.pdf -
   ```
 - **依赖/成本**：**零依赖**（纯字符串拼接 + 标准库）。**无需 Windows / 微信**，用 `a-ingestion-tests/chat_sample.json` 即可开发联调。
 - **备注**：A6 真机取数后直接复用本环节逻辑（`type/media` 由 `synapse_wechat_ingest` 归一化产出即可）。媒体感知属 A 单方能力，已落地；是否"一次返回多条"是否启用 `/parse_chat` 取决于提案二的对齐结果。
-- **多来源（source）**：`source` 只表示来源渠道（微信 / 钉钉 / 飞书 / 用户上传），**不表示文件格式**（格式由 `name` 后缀 + `mimeType` 表达）。`/parse_chat` 支持 `source` 入参（默认「微信」，媒体证据继承）；`/parse` 上传钉钉/飞书信封（`{"source":"钉钉","messages":[...]}`）会自动识别来源。钉钉适配器见 `dingtalk_to_synapse.py`；飞书需新建 `feishu_to_synapse.py`，只要输出同样的 `{seq,sender,time,text,type,media,amount}`，A4/B/C 零改动。实测：`a-ingestion-tests/run_source_test.py`。
 
 ---
 
@@ -299,19 +297,17 @@ python check_evidence.py --url http://localhost:8000/parse --upload sample.pdf -
 
 ---
 
-### A6-b · 钉钉 / 飞书适配器（同一套信封规范，已落地）
+### A6-b · 钉钉适配器（同一套信封规范，已落地）
 
 > 📄 **完整实现依据**：`钉钉端接入设计.md`（dws 三条取数命令、时间锚点扫描、类型推断优先级、媒体三通道分流、13 条坑清单）。本节只留任务口径。
 
-- **目标**：把钉钉、飞书的原生导出（`dws` / 飞书开放平台 JSON）归一化成与微信完全一致的 `[{seq,sender,time,text,type,media,amount}]`，**一套 A4 代码吃三端**。
+- **目标**：把钉钉的原生导出（`dws`开放平台 JSON）归一化成与微信完全一致的 `[{seq,sender,time,text,type,media,amount}]`，**一套 A4 代码吃三端**。
 - **交付**（位于项目总文件夹）：
   - `dingtalk_to_synapse.py`：`dws chat message list -f json` → `<会话名>.json` 信封 `{source:"钉钉", messages[]}` + `<会话名>.records.json` 裸数组；媒体走 `dws chat message download-media`（图片/语音/视频）与 `dws drive download`（文件），失败降级为 `[文件:xxx@时间]` 占位。
-  - `feishu_to_synapse.py`：飞书导出 JSON → 同款信封与 records，`source="飞书"`。
 - **关键设计**：**平台差异只写在 `source`，不新增 `kind`**。三端聊天一律 `kind="chat"`，媒体仍是独立 `image`/`pdf` 证据并继承同一 `source`——所以 B/C 零改动。
 - **验收（已实测）**：
   - 钉钉 6 条消息（含 1 张图）→ `/parse_chat` 返回 2 条证据：`chat(source=钉钉)` + `image(source=钉钉)`。
   - 钉钉信封 `.json` 直接投 `/parse` → `kind=chat, source=钉钉`；投 `/parse_chat` 同样保得住 `source`。
-  - 飞书 7 条消息 → 同结构，`source=飞书`。
 - **低成本测试（已落地，可复跑）**：
   ```bash
   python a-ingestion-tests/run_multiplatform_test.py   # 三端 source + 媒体继承 + 无信封不猜平台
@@ -418,5 +414,5 @@ python check_evidence.py --url http://localhost:8000/parse --upload sample.pdf -
 | A9 | ✅  | 2026-11-01 | 超大附件闸门：**单份附件** >100MB 不读内容、只回下载链接+解释（HTTP 200，无拒收）；≤100MB 一律正常解析；请求体不设限；MIME 魔数兜底 |
 | A5 | ⛔ | 2026-11-01 | **不做**：截图统一 `kind=image` 交视觉模型；OCR 会把 image 的校验豁免变成强校验，反而砸掉链路 |
 | A6 | ✅  | 2026-11-01 | wechat-ai-memory 单源真机取数：文字/图片/语音(SILK→whisper)/真实文件全通；密钥本机缓存后不再重启微信；详见 `微信端选型结论.md` |
-| A6-b | ✅  | 2026-11-01 | 钉钉/飞书适配器：同款 `{source,messages[]}` 信封 + records 裸数组；三端共用 A4，平台差异只进 `source`；信封可直投 `/parse` 与 `/parse_chat` |
+| A6-b | ✅  | 2026-11-01 | 钉钉适配器：同款 `{source,messages[]}` 信封 + records 裸数组；三端共用 A4，平台差异只进 `source`；信封可直投 `/parse` 与 `/parse_chat` |
 | A7 | ⬜  |            |                                                                         |

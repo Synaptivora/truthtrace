@@ -3,7 +3,7 @@
 """kind 类型路由实测：验证三平台聊天都能被正确判成 chat，且普通 JSON 不被误判。
 
 重点回归的真实 bug：
-  钉钉/飞书适配器产物是 <会话名>.json / <会话名>.records.json，
+  钉钉适配器产物是 <会话名>.json / <会话名>.records.json，
   文件名里没有「聊天/微信/message」等关键词，
   旧逻辑会把它们判成 kind=text（聊天记录变成一坨 JSON 原文丢给 B）。
 """
@@ -75,10 +75,11 @@ ev = post_file(p)
 check("钉钉信封 kind", ev["kind"], "chat")
 check("钉钉信封 source", ev["source"], "钉钉")
 
-# --- 4. 飞书裸数组（文件名无人话关键词）---
+# --- 4. 通用聊天裸数组（文件名无人话关键词）---
 p = os.path.join(tmp, "任务组.json")
 json.dump(records, open(p, "w", encoding="utf-8"), ensure_ascii=False)
-check("飞书 任务组.json kind", post_file(p)["kind"], "chat")
+
+check("通用任务组 JSON kind", post_file(p)["kind"], "chat")
 
 # --- 5. 普通配置 JSON 不能被误判成 chat ---
 p = os.path.join(tmp, "config.json")

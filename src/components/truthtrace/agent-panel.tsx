@@ -6,7 +6,7 @@ import type { Conversation } from "@/lib/conversation/store";
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { MessageCircle, X, Settings, Send, Square, Trash2, Cable } from "lucide-react";
+import { MessageCircle, X, Settings, Send, Square, Trash2, Cable, Cpu, FilePlus } from "lucide-react";
 import type { AnalysisResult, Evidence } from "@/lib/contracts";
 import { providers, type Connection, type Protocol } from "@/lib/agent/providers";
 import type { AgentEvent, AgentReply } from "@/lib/agent/contracts";
@@ -113,10 +113,17 @@ export function AgentPanel({ context, onReady, onChannel }: { context: AgentCont
       <nav className="agent-nav" aria-label="咪探长功能">
         <button type="button" aria-pressed={view === "chat"} onClick={() => setView("chat")}><MessageCircle size={17} />对话</button>
         {context?.analysis&&<button type="button" aria-pressed={view === "investigation"} onClick={()=>setView("investigation")}>本次调查</button>}
-        <button type="button" aria-pressed={view === "materials"} onClick={()=>setView("materials")}>补充材料</button>
+        <button type="button" aria-pressed={view === "materials"} onClick={()=>setView("materials")}><FilePlus size={17} aria-hidden="true" />补充材料</button>
         <button type="button" aria-pressed={["settings","model","connection"].includes(view)} onClick={()=>setView("settings")}><Settings size={17}/>设置</button>
       </nav>
-      <section hidden={view!=="settings"} className="agent-settings"><h2>连接与显示设置</h2><p>按当前需要配置，目标和材料会保留。</p><button onClick={()=>{returnTo.current=context?.analysis?"investigation":"chat";setView("model");}}>模型设置</button><button onClick={()=>setView("connection")}><Cable size={16}/>连接渠道</button></section>
+      <section hidden={view !== "settings"} className="agent-settings">
+        <h2>连接与显示设置</h2>
+        <p>按当前需要配置，目标和材料会保留。</p>
+        <div className="agent-settings-actions">
+          <button type="button" onClick={() => { returnTo.current = context?.analysis ? "investigation" : "chat"; setView("model"); }}><Cpu size={16} aria-hidden="true" />模型设置</button>
+          <button type="button" onClick={() => setView("connection")}><Cable size={16} aria-hidden="true" />连接渠道</button>
+        </div>
+      </section>
       {view === "materials"&&<section className="agent-settings"><h2>{context?"把新材料交给我":"先选与问题有关的材料"}</h2><p>{goal||context?.goal||"可以先输入目标，也可以直接添加材料。"}</p><p>导入后保留你的目标；已有调查会纳入新材料重新核查。</p><input ref={upload} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.json" onChange={e=>{void importFiles(Array.from(e.target.files||[]));e.target.value="";}}/><button disabled={materialBusy} onClick={()=>upload.current?.click()}>上传文件或截图</button><button disabled={materialBusy} onClick={()=>supplement("dingtalk")}>选择钉钉会话</button><button disabled={materialBusy} onClick={()=>supplement("wechat")}>选择微信会话</button>{materialBusy&&<p role="status">正在整理，原有材料和目标会保留…</p>}{materialError&&<p role="alert">{materialError}</p>}</section>}
       {view === "investigation"&&context?.analysis&&<InvestigatorPanel key={context.caseId} context={{...context,analysis:context.analysis}} initialGoal={goal||context.goal} routedMode={routeMode} onGoalChange={value=>{setGoal(value);setRouteMode(undefined);}} onConfigure={configure} onSupplement={supplement}/>}
       {view === "investigation"&&routeReason&&<small className="agent-route-note">{routeReason}</small>}

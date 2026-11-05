@@ -10,7 +10,7 @@ npm run build
 npm run start:local
 ```
 
-打开 `http://127.0.0.1:3000`。开发可用 `npm run dev:local`；只启动 `npm run dev` 时，钉钉连接按钮也会自动准备本机解析服务。缺失 Python 时页面会说明原因，安装 Python 后重试。启动不会先阻塞安装微信、飞书等无关渠道；完整依赖安装可单独运行 `npm run setup`。
+打开 `http://127.0.0.1:3000`。开发可用 `npm run dev:local`；只启动 `npm run dev` 时，钉钉连接按钮也会自动准备本机解析服务。缺失 Python 时页面会说明原因，安装 Python 后重试。启动不会先阻塞安装微信等无关渠道；完整依赖安装可单独运行 `npm run setup`。
 
 助手 → 设置 → 模型设置 → 填写模型连接，选择 DeepSeek 时会预填官方地址与 `deepseek-flash`，填入自己的密钥后点击「连接并保存模型」。保存会验证文本与工具调用；Windows 下密钥经 DPAPI 保护后加密存于本机 `.truthtrace`。临时连接测试不等于保存，不能用于后台材料分析。其他系统使用 `AGENT_*` 环境变量配置。
 

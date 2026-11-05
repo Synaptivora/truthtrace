@@ -33,7 +33,6 @@ const WAM_DEFAULT_SRC = join(WAM_SRC_ROOT, 'wechat-ai-memory-main', 'src');
 const PATCH_FILE = join(ROOT, 'scripts', 'patches', 'wechat4_key_capture.py');
 
 const DWS_PKG = 'dingtalk-workspace-cli';
-const LARK_PKG = '@larksuite/cli';
 const WAM_URLS = [
   'https://codeload.github.com/PC267/wechat-ai-memory/zip/refs/heads/main',
   'https://codeload.github.com/congjin/wechat-ai-memory/zip/refs/heads/main',
@@ -212,12 +211,11 @@ export async function detect() {
     'print(",".join(name for name, mod in mods if importlib.util.find_spec(mod) is None))\n',
   );
 
-  const [node, npm, python, dws, lark, deps, dwsAuth] = await Promise.all([
+  const [node, npm, python, dws, deps, dwsAuth] = await Promise.all([
     Promise.resolve({ ok: true, out: process.version }),
     quick('npm', ['-v']),
     quick(PYTHON, ['--version']),
     quick('dws', ['--version']),
-    quick('lark-cli', ['--version']),
     quick(PYTHON, [pyCheck]),
     quick('dws', ['auth', 'status', '-f', 'json'], { timeout: 20_000 }),
   ]);
@@ -243,7 +241,6 @@ export async function detect() {
   const checks = {
     runtime: python.ok && npm.ok,
     dws: { installed: dws.ok, version: dws.out, ...auth, ok: dws.ok && auth.authenticated && auth.token_valid },
-    lark: { installed: lark.ok, version: lark.out },
     python: { version: python.out, ok: python.ok, missing },
     wam: { found: Boolean(wam), path: wam?.path || '', patched: wam?.patched || false, localZips: localZips() },
     keyCache: cache,
@@ -374,7 +371,6 @@ async function ensureWamSource(onLine) {
 const STEP_DEFS = [
   { id: 'runtime', label: '检查 Node / npm / Python 运行环境' },
   { id: 'dws', label: '安装钉钉 dws CLI（dingtalk-workspace-cli）' },
-  { id: 'lark', label: '安装飞书 lark-cli（可选）' },
   { id: 'python', label: '安装 A 解析服务与微信直读的 Python 依赖' },
   { id: 'wam', label: '准备 wechat-ai-memory 源码并打补丁' },
   { id: 'env', label: '写入 .env.local 配置' },
@@ -409,9 +405,6 @@ export async function runSetup(onStep = () => {}) {
           break;
         case 'dws':
           result = await ensureNpmGlobal(DWS_PKG, 'dws', log);
-          break;
-        case 'lark':
-          result = await ensureNpmGlobal(LARK_PKG, 'lark-cli', log, true);
           break;
         case 'python':
           result = await ensurePythonDeps(before.checks.python.missing, log);

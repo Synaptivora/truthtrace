@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""三端来源实测：微信 / 钉钉 / 飞书 走同一套 A4 代码，平台差异只进 source 不进 kind。
+"""保留渠道来源实测：微信 / 钉钉 走同一套 A4 代码，平台差异只进 source 不进 kind。
 
 覆盖：
   1. 钉钉真产物（synapse_input/…records.json）→ chat + 独立媒体，source=钉钉
-  2. 飞书真产物 → 同结构，source=飞书
   3. 微信群聊（构造，带图片）→ source=微信，媒体继承
-  4. 三端 kind 完全一致（都只有 chat / image / pdf，没有平台 kind）
+  4. 保留渠道 kind 完全一致（都只有 chat / image / pdf，没有平台 kind）
   5. 钉钉信封 .json 直接投 /parse → kind=chat, source=钉钉
   6. 同一信封投 /parse_chat → source=钉钉（records / messages 两个键都认）
   7. 不传 source → 用户上传（不替调用方猜平台）
@@ -78,10 +77,8 @@ def post_file(path, qs=""):
     return json.loads(urllib.request.urlopen(req, timeout=120).read())
 
 
-# ---------- 三端输入 ----------
+# ---------- 保留渠道输入 ----------
 dt_records = json.load(open(os.path.join(WS, "synapse_input", "demo_供应商催款群.records.json"),
-                            encoding="utf-8"))
-fs_records = json.load(open(os.path.join(WS, "synapse_input", "demo_飞书供应商催款群.records.json"),
                             encoding="utf-8"))
 
 PNG_1PX = base64.b64decode(
@@ -115,11 +112,6 @@ check("钉钉 媒体全部继承平台", all(e["source"] == "钉钉" for e in dt
 kinds_dt = sorted({e["kind"] for e in dt})
 print(f"     钉钉产出: {[(e['kind'], e['content'][:14]) for e in dt]}")
 
-print("\n=== 2) 飞书真产物 → /parse_chat(source=飞书) ===")
-fs = post_json({"records": fs_records, "name": "飞书_供应商催款群", "source": "飞书"})["evidences"]
-check("飞书 chat 来源", fs[0]["source"], "飞书")
-check("飞书 媒体全部继承平台", all(e["source"] == "飞书" for e in fs), True)
-kinds_fs = sorted({e["kind"] for e in fs})
 
 print("\n=== 3) 微信群聊（含图片）→ source=微信 ===")
 wx = post_json({"records": wx_records, "name": "张三_2026-11-01", "source": "微信"})["evidences"]
@@ -133,12 +125,11 @@ kinds_wx = sorted({e["kind"] for e in wx})
 print("\n=== 4) 平台差异不进 kind（kind 只在契约四值内）===")
 ALLOWED = {"text", "chat", "image", "pdf"}
 check("钉钉 kind 全在契约内", set(kinds_dt) <= ALLOWED, True)
-check("飞书 kind 全在契约内", set(kinds_fs) <= ALLOWED, True)
 check("微信 kind 全在契约内", set(kinds_wx) <= ALLOWED, True)
-check("三端 chat 都是同一 kind", [evs[0]["kind"] for evs in (dt, fs, wx)],
-      ["chat", "chat", "chat"])
-check("kind 里没有平台值", [k for k in (kinds_dt + kinds_fs + kinds_wx)
-                            if k in ("微信", "钉钉", "飞书")], [])
+check("保留渠道 chat 都是同一 kind", [evs[0]["kind"] for evs in (dt, wx)],
+      ["chat", "chat"])
+check("kind 里没有平台值", [k for k in (kinds_dt + kinds_wx)
+                            if k in ("微信", "钉钉")], [])
 
 print("\n=== 5) 钉钉信封 .json 直接投 /parse（用户直接提供）===")
 env_path = os.path.join(WS, "synapse_input", "demo_供应商催款群.json")

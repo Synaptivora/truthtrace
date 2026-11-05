@@ -11,7 +11,7 @@
 > ├── server.py            解析服务（唯一入口）
 > ├── requirements.txt     依赖（pypdf / pymupdf<2.0 / pillow / python-docx / openpyxl / python-pptx）
 > ├── ai_ingest/          方案 A：AI 驱动智能取数（5 工具 + agent loop）
-> ├── adapters/           钉钉 / 微信 / 飞书 适配器 + 媒体解码 + 密钥缓存 + 语音转写
+> ├── adapters/           钉钉 / 微信 适配器 + 媒体解码 + 密钥缓存 + 语音转写
 > │                      ⚠️ pywxdump_to_synapse.py / media_decode.py **已弃用**，仅归档
 > ├── tests/              14 套测试，全 PASS（python tests/run_all.py）
 > └── testdata/           构造的演示数据（非真实聊天，可提交）
@@ -70,11 +70,11 @@ PORT=9000 python server.py
 
 `POST /parse_chat`  —  `application/json`，body `{ "records": [...], "name": "...", "source": "钉钉", "media_dir": "..." }`
 返回  `{ "evidences": [ chat证据, 独立image/pdf证据, ... ] }`
-（A 侧「媒体感知」扩展；**`source` 表示来源渠道（微信 / 钉钉 / 飞书），不传则为「用户上传」，媒体证据继承同一来源**；
-`records` 与 `messages` 两个键都认，所以钉钉/飞书适配器产出的 `.json` 信封可以原样投进来；
+（A 侧「媒体感知」扩展；**`source` 表示来源渠道（微信 / 钉钉），不传则为「用户上传」，媒体证据继承同一来源**；
+`records` 与 `messages` 两个键都认，所以钉钉适配器产出的 `.json` 信封可以原样投进来；
 B 的 `parser.ts` 当前只认单条，启用 bundle 需 B 改 parser，见提案）
 
-> **`source` 的语义：只表示「来源渠道」**（微信 / 钉钉 / 飞书 / 用户上传）。
+> **`source` 的语义：只表示「来源渠道」**（微信 / 钉钉 / 用户上传）。
 > 文件格式（Word/Excel/PPT/PDF）**不写进 `source`**——由 `name`（含 `.docx`/`.xlsx` 后缀）+ `mimeType` 表达，
 > `content` 自身也保留结构线索（如 Excel 的 `# Sheet:`）。
 
@@ -84,10 +84,10 @@ B 的 `parser.ts` 当前只认单条，启用 bundle 需 B 改 parser，见提�
 > | 字段 | 回答什么问题 | 取值 |
 > |---|---|---|
 > | `kind` | B 该怎么消费这条证据 | `text`（当文本读）/ `image`（当图看）/ `chat`（对话文本）/ `pdf`（文档文本） |
-> | `source` | 这条证据从哪来 | 微信 / 钉钉 / 飞书 / 用户上传 |
+> | `source` | 这条证据从哪来 | 微信 / 钉钉 / 用户上传 |
 > | `name` + `mimeType` | 原始文件是什么格式 | `交易明细.xlsx` + OOXML MIME |
 >
-> 所以**微信、钉钉、飞书的聊天记录一律 `kind="chat"`**——平台差异只在 `source`，不需要、也不允许给 kind 加平台值
+> 所以**微信、钉钉的聊天记录一律 `kind="chat"`**——平台差异只在 `source`，不需要、也不允许给 kind 加平台值
 > （`kind` 是 `contracts.ts` 的四选一枚举，加值必须三方走 PR）。
 > 同理 Word/Excel/PPT 抽文本后一律 `kind="text"`，格式靠 `name` 后缀体现。
 
@@ -95,11 +95,11 @@ B 的 `parser.ts` 当前只认单条，启用 bundle 需 B 改 parser，见提�
 
 | 通道 | 入口 | 产物 | `source` 是谁定的 |
 |---|---|---|---|
-| 平台适配器 | `adapters/`（钉钉 / 微信 / 飞书 / pywxdump） | `<会话名>.json` 信封 + `<会话名>.records.json` 裸数组 | 适配器显式传（微信/钉钉/飞书），信封里也写一份 |
+| 平台适配器 | `adapters/`（钉钉 / 微信 / pywxdump） | `<会话名>.json` 信封 + `<会话名>.records.json` 裸数组 | 适配器显式传（微信/钉钉），信封里也写一份 |
 | 用户上传文件 | C → B → `POST /parse` | 原文件 | 信封有就认，没有就 `用户上传` |
 | 用户手存文本 | `POST /parse?source=钉钉` | `.txt` 对话稿 | 调用方显式声明；**不看文件名** |
 
-- 钉钉/飞书适配器产出的 `.json` 信封可以直接投 `/parse_chat`（`records`/`messages` 都认，`source` 会被读走）。
+- 钉钉适配器产出的 `.json` 信封可以直接投 `/parse_chat`（`records`/`messages` 都认，`source` 会被读走）。
 - 不传 `source` 就是 `用户上传`——A 不替调用方猜平台。文件名里的「钉钉」「微信」只用于判 `kind`，不用来定来源。
 
 ### kind 是怎么判出来的（类型路由）
@@ -108,9 +108,8 @@ B 的 `parser.ts` 当前只认单条，启用 bundle 需 B 改 parser，见提�
 
 - MIME 为 `image/*` → `image`；`application/pdf` → `pdf`。
 - **内容嗅探**：JSON 里若是「有发送者字段 + 有正文字段」的记录数组（或 `{source, messages:[...]}` 信封），判 `chat`。
-  这一步是必需的——钉钉/飞书适配器产物叫 `<会话名>.json` / `<会话名>.records.json`，**文件名里没有「聊天」二字**，
+  这一步是必需的——钉钉适配器产物叫 `<会话名>.json` / `<会话名>.records.json`，**文件名里没有「聊天」二字**，
   只靠文件名会被误判成 `text`，聊天记录就变成一坨 JSON 原文丢给 B（kind 错、无内联标记、媒体全丢）。
-- 文件名关键词兜底：`chat|message|会话|聊天|微信|weixin|wechat|dingtalk|钉钉|feishu|飞书` → `chat`。
 - 其余 → `text`。
 
 > 已知边界：**纯文本对话稿**（如 `<会话名>.md`，形如 `张三: 在吗`）若文件名不含上述关键词，会判成 `text`。
@@ -160,7 +159,6 @@ POST /source/connect {"source"} → { source,authorized,status,action,hint }
 POST /source/sync    {"source"} → { source,synced,evidences:[...],windows,agent }
 ```
 
-- 渠道名支持中英文别名（`钉钉`/`dingtalk`/`dws`、`微信`/`wechat`、`飞书`/`feishu`），归一到英文 id。
 - `sync` 受 **single-flight 锁**保护：并发请求返回 `409 {"status":"busy"}`，不会二次执行
   （后端是进程内内存态，多线程下并发 sync 会互相覆盖）。
 - `sync` 产出的 `Evidence.source` 是**渠道名**，不会落回「用户上传」。
@@ -351,23 +349,13 @@ python -m pip install pysilk faster-whisper   # 建议独立 3.13 venv：ctransl
 - 中文默认 `medium`：必须加 `initial_prompt="以下是普通话的句子。"` + `condition_on_previous_text=False`，
   否则**输出繁体**、噪声段还会冒英文幻觉；`small` 会明显错听（「十来块的杯子」→「我死了」）。
 
-### 钉钉 / 飞书端取数（适配器已就绪，依赖外部 CLI）
+### 钉钉端取数（适配器已就绪，依赖外部 CLI）
 
 | 渠道 | 外部工具 | 安装 | 适配器 | 状态 |
 |---|---|---|---|---|
 | 钉钉 | `dws`（官方开源 CLI） | 官方安装包 / npm | `adapters/dingtalk_to_synapse.py` | ✅ 真实数据跑通（95 条、8 个媒体全部下载成功） |
-| 飞书 | `lark-cli`（官方开源 CLI） | `npm i -g @larksuite/cli` | `adapters/feishu_to_synapse.py` | 🟡 demo 通过；真机被租户策略挡住（见下） |
 
-- 两者都要先登录：`dws auth login` / `lark-cli config init --new` + `auth login`。
-- 详细接入见 **`docs/A/钉钉端接入设计.md`**（18 节）与 **`docs/A/飞书端选型结论.md`**（含真机验证记录）。
-- ⚠️ **飞书尚未真机跑通**：`lark-cli` 与适配器均就位，但取 token 被平台策略 `21001` 拦住
-  （当前租户不具备 OpenAPI 资质）。**演示只能用合成样例**，见 **`docs/A/飞书端接入现状.md`**。
-  该文档只记现状与阻塞，**未写实现设计**——真机跑通前不固化设计，避免返工。
-- 飞书媒体：`im +chat-messages-list --download-resources` 会一次性下到 `./lark-im-resources/`
-  并回填 `local_path`，适配器优先读它。
-- **飞书的阻塞不是代码问题**：`tenant_access_token` 能拿到（用错误 secret 会返回 `10014`，
-  证明凭证链路正常），但所有 API 返回 **21001「scope blocked by data security policy」**
-  —— 个人版租户无开放平台资质，需换有资质的企业租户或由管理员放行。
+- 详细接入见 `docs/A/钉钉端接入设计.md`。
 
 ### 环境变量
 

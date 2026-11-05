@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""来源（source）渠道实测：用户上传 / 微信 / 钉钉 / 飞书。
+"""来源（source）渠道实测：用户上传 / 微信 / 钉钉。
 
 验证 source 的语义 = 来源渠道（不是文件格式）：
   - 本地文件上传 → 用户上传
   - /parse 上传钉钉信封 {source:"钉钉",messages:[...]} → 自动识别为 钉钉
   - /parse?source=钉钉 显式覆盖 → 优先于信封/文件名
-  - /parse_chat 显式 source → 钉钉 / 飞书，媒体证据也继承平台
+  - /parse_chat 显式 source → 钉钉，媒体证据也继承平台
   - 不传 source → 默认 用户上传（不替调用方猜平台）
   - 钉钉适配器产出的信封 .json 可直接投 /parse_chat，source 不丢
 """
@@ -95,7 +95,6 @@ b = post_json({"records": records, "source": "钉钉"})
 check("/parse_chat 钉钉 chat来源", b["evidences"][0]["source"], "钉钉")
 check("/parse_chat 钉钉 媒体来源", b["evidences"][1]["source"], "钉钉")
 
-check("/parse_chat 飞书", post_json({"records": records, "source": "飞书"})["evidences"][0]["source"], "飞书")
 check("/parse_chat 不传 source 默认用户上传",
       post_json({"records": records})["evidences"][0]["source"], "用户上传")
 
@@ -104,7 +103,6 @@ check("/parse_chat 投钉钉信封", post_json(ding_env)["evidences"][0]["source
 
 # /parse 的 ?source= 显式覆盖：手存 txt 没有信封，只能靠调用方声明
 check("/parse?source=钉钉 覆盖", post_file(txt, "?source=" + quote("钉钉"))["evidence"]["source"], "钉钉")
-check("/parse?source=飞书 覆盖", post_file(txt, "?source=" + quote("飞书"))["evidence"]["source"], "飞书")
 check("/parse 无 source 参数仍为用户上传", post_file(txt)["evidence"]["source"], "用户上传")
 
 print("\nRESULT:", "ALL PASS" if all(results) else f"{results.count(False)} FAILED")

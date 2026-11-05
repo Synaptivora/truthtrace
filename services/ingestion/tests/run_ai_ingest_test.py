@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""方案 A（AI 智能取数）端到端验证：三端真实数据都产出聚焦证据。
+"""方案 A（AI 智能取数）端到端验证：保留渠道真实数据都产出聚焦证据。
 
 重点守一个真实踩过的 bug：
-    ToolRegistry 以后端的 `source` 属性（钉钉/微信/飞书/mock）为 key，
-    而 CLI 与 service 拿的是英文 id（dingtalk/wechat/feishu/mock）。
+    ToolRegistry 以后端的 `source` 属性（钉钉/微信/mock）为 key，
+    而 CLI 与 service 拿的是英文 id（dingtalk/wechat/mock）。
     传错就返回「未知数据源」，agent 静默产出 **0 个窗口**——不报错、不崩溃，
-    只是证据为空，是最难查的一类问题。这里三端各跑一遍把它钉死。
+    只是证据为空，是最难查的一类问题。这里保留渠道各跑一遍把它钉死。
 
 覆盖：
   1. mock  → 窗口 > 0，证据通过 EvidenceSchema 不变量
   2. 钉钉   → 真实 demo 数据，窗口 > 0，Evidence.source == 钉钉
-  3. 飞书   → 真实 demo 数据，窗口 > 0，Evidence.source == 飞书
   4. 工具层 → 用 backend.source 调 search_messages / list_transfers 能命中
   5. service.sync → 中文名与英文 id 归一到同一渠道
 
@@ -81,17 +80,6 @@ def main():
     check("source 是钉钉", all(e.get("source") == "钉钉" for e in evs),
           str(sorted({e.get("source") for e in evs})))
 
-    print("\n=== 3) 飞书（真实 demo 数据）===")
-    fs = os.path.join(DATA, "feishu_demo", "messages.json")
-    check("demo 数据存在", os.path.isfile(fs), fs)
-    r = run_cli("feishu", fs, os.path.join(tmp, "fs"))
-    check("CLI 退出码 0", r.returncode == 0, r.stderr[-200:] if r.returncode else "")
-    out = os.path.join(tmp, "fs", "evidence_bundle.json")
-    evs = json.load(open(out, encoding="utf-8")) if os.path.isfile(out) else []
-    check("产出非空", len(evs) > 0, f"{len(evs)} 条")
-    check("source 是飞书", all(e.get("source") == "飞书" for e in evs),
-          str(sorted({e.get("source") for e in evs})))
-
     print("\n=== 4) 工具层 key 一致性 ===")
     from ai_ingest.tools import ToolRegistry
     from ai_ingest.backends import MockBackend
@@ -108,7 +96,6 @@ def main():
     from ai_ingest.service import SourceService, normalize_source
     check("钉钉 → dingtalk", normalize_source("钉钉") == "dingtalk")
     check("dingtalk → dingtalk", normalize_source("dingtalk") == "dingtalk")
-    check("飞书 → feishu", normalize_source("飞书") == "feishu")
     svc = SourceService()
     obj, code = svc.sync("mock")
     check("sync 用中文别名也能跑", code == 200 and obj.get("synced", 0) > 0,
@@ -119,7 +106,7 @@ def main():
     if fails:
         print(f"RESULT: {len(fails)} FAILED → {fails}")
         sys.exit(1)
-    print("RESULT: ALL PASS —— 三端取数均产出聚焦证据，无静默空结果")
+    print("RESULT: ALL PASS —— 保留渠道取数均产出聚焦证据，无静默空结果")
 
 
 if __name__ == "__main__":

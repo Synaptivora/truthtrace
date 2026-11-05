@@ -11,7 +11,6 @@ type Detect = {
   checks: {
     runtime: boolean;
     dws: { installed: boolean; version: string; ok: boolean; user: string; expires_at: string };
-    lark: { installed: boolean; version: string };
     python: { version: string; ok: boolean; missing: string[] };
     wam: { found: boolean; path: string; patched: boolean };
     keyCache: { exists: boolean; accounts: number };
@@ -102,7 +101,6 @@ export function SetupTools({ onDone }: { onDone?: () => void }) {
   const url = safeAuthUrl(job?.authUrl);
   const chips = c ? [
     { key: "dws", label: "dws", ok: c.dws.installed, note: c.dws.ok ? `已授权 ${c.dws.user}` : "待扫码" },
-    { key: "lark", label: "lark-cli", ok: c.lark.installed, note: c.lark.installed ? "已安装" : "未安装（可选）" },
     { key: "python", label: "Python 依赖", ok: c.python.missing.length === 0, note: c.python.missing.length ? `缺 ${c.python.missing.length} 项` : "齐全" },
     { key: "wam", label: "微信源码", ok: c.wam.found, note: c.wam.found ? (c.wam.patched ? "已打补丁" : "未打补丁") : "缺失" },
     { key: "key", label: "微信密钥", ok: c.keyCache.exists, note: c.keyCache.exists ? `缓存 ${c.keyCache.accounts} 账户` : "待首次抓取" },

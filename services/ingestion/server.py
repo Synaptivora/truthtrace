@@ -153,7 +153,7 @@ def parse_multipart_fields(body: bytes, content_type: str):
 # 文件名里的「聊天」线索：含三平台中英文名，兼容各适配器的命名习惯
 _CHAT_NAME_RE = re.compile(
     r"chat|message|msgs?|会话|聊天|微信|weixin|wechat|"
-    r"dingtalk|dingding|钉钉|feishu|lark|飞书",
+    r"dingtalk|dingding|钉钉",
     re.I,
 )
 
@@ -162,14 +162,14 @@ def evidence_kind(filename: str, mime: str, data: bytes | None = None) -> str:
     """类型路由：决定这条证据走哪条消费通道。
 
     kind 表达「证据的物理形态 / B 的消费通道」，**不是来源平台**——
-    微信、钉钉、飞书的聊天记录一律 kind="chat"，平台差异写在 source。
+    微信、钉钉的聊天记录一律 kind="chat"，平台差异写在 source。
     判定顺序：MIME → 内容嗅探（聊天 JSON）→ 文件名关键词 → 兜底 text。
     """
     if (mime or "").startswith("image/"):
         return "image"
     if mime == "application/pdf":
         return "pdf"
-    # 1) 内容嗅探优先：钉钉/飞书适配器产物是 <会话名>.json / <会话名>.records.json，
+    # 1) 内容嗅探优先：钉钉适配器产物是 <会话名>.json / <会话名>.records.json，
     #    文件名里没有「聊天」二字，只靠文件名会被误判成 text，
     #    结果聊天记录被当成一坨 JSON 原文丢给 B（kind 错、无内联标记、媒体全丢）。
     if data and _looks_like_chat_json(data):
@@ -198,7 +198,7 @@ def decode_text(data: bytes) -> str:
     return data.decode("latin-1")
 
 
-# 判定「聊天记录 JSON」用的字段别名（覆盖微信/钉钉/飞书三套适配器）
+# 判定「聊天记录 JSON」用的字段别名（覆盖微信/钉钉三套适配器）
 _CHAT_SENDER_KEYS = (
     "sender", "senderName", "sender_name", "from", "fromUser", "speaker",
     "nick", "nickname", "userName", "sendUserName", "senderId",
@@ -1091,7 +1091,7 @@ def build_chat_from_text(filename: str, data: bytes) -> str:
             chat_text, _media = build_chat_content(obj)
             return chat_text
         if isinstance(obj, dict):
-            # 兼容钉钉/飞书适配器输出的信封：{"source":"钉钉","messages":[...]}
+            # 兼容钉钉适配器输出的信封：{"source":"钉钉","messages":[...]}
             records = obj.get("messages") or obj.get("records") or []
             if isinstance(records, list) and records:
                 chat_text, _media = build_chat_content(records)
@@ -1105,7 +1105,7 @@ def build_chat_bundle(records, name: str | None = None, media_dir: str | None = 
                       source: str = "用户上传", allow_files: bool = True) -> list:
     """返回 [chat_evidence, *media_evidences]。用于 /parse_chat（A 侧扩展）。
 
-    source 由调用方显式给（微信/钉钉/飞书）；不给就按「用户上传」标，
+    source 由调用方显式给（微信/钉钉）；不给就按「用户上传」标，
     不替调用方猜平台——猜错会让 C 的溯源 chip 显示假来源。"""
     chat_text, media_list = build_chat_content(records)
     evidences = [{
@@ -1117,7 +1117,7 @@ def build_chat_bundle(records, name: str | None = None, media_dir: str | None = 
         "source": source,
     }]
     for item in media_list:
-        # 媒体证据的 source 也继承平台（微信/钉钉/飞书），便于 B/C 溯源
+        # 媒体证据的 source 也继承平台（微信/钉钉），便于 B/C 溯源
         evidences.append(build_media_evidence(item, media_dir, source, allow_files=allow_files))
     return evidences
 
@@ -1126,7 +1126,7 @@ def build_chat_bundle(records, name: str | None = None, media_dir: str | None = 
 # 5) 单条 evidence 构造（/parse 用）
 # ---------------------------------------------------------------------------
 def source_label(kind: str, origin: str | None = None) -> str:
-    """source 只表示「来源渠道」：微信 / 钉钉 / 飞书 / 用户上传。
+    """source 只表示「来源渠道」：微信 / 钉钉 / 用户上传。
 
     文件格式不写进 source——格式由 name（含 .docx/.xlsx 后缀）+ mimeType 表达，
     content 自身也保留结构线索（如 Excel 的 `# Sheet:`）。
@@ -1134,7 +1134,7 @@ def source_label(kind: str, origin: str | None = None) -> str:
 
     默认值（无 origin 时）一律为「用户上传」：人工上传入口 /parse 的 origin 恒为 None，
     聊天 JSON 无平台信封时 chat_origin 也返回 None。此前的「chat 默认微信」会把用户手敲 /
-    飞书·钉钉导出的聊天裸文件误标成微信，属平台溯源造假。真实平台来源由聊天信封的
+    钉钉导出的聊天裸文件误标成微信，属平台溯源造假。真实平台来源由聊天信封的
     source 字段或适配器显式传入的 source 覆盖（/parse_chat 自带 source，不受影响）。
     """
     if origin and str(origin).strip():
@@ -1356,7 +1356,7 @@ def build_evidence(filename, mime, data: bytes, origin: str | None = None,
     else:  # chat
         content = build_chat_from_text(filename or "", data)
         if not origin:
-            origin = chat_origin(data)  # 钉钉/飞书信封里自带 source 时自动识别
+            origin = chat_origin(data)  # 钉钉信封里自带 source 时自动识别
 
     # 文本 / 聊天也要守预算：几十万字符的 Word、几万条消息的聊天记录，
     # 和三百页 PDF 一样会击穿 B 的上下文窗口（B 对 content 长度零限制）。
@@ -1639,7 +1639,7 @@ class Handler(BaseHTTPRequestHandler):
         # 三个可选开关（不带则用默认值，C 侧现有调用完全不受影响）：
         #   ?max_chars=8000   单条证据正文预算（字符）
         #   ?pages=100-120    只看指定页码范围
-        #   ?source=钉钉      来源渠道（用户上传 / 微信 / 钉钉 / 飞书），优先级高于信封与文件名
+        #   ?source=钉钉      来源渠道（用户上传 / 微信 / 钉钉），优先级高于信封与文件名
         q_max_chars = query.get("max_chars", [None])[0]
         q_pages = query.get("pages", [None])[0]
         q_source = query.get("source", [None])[0]
@@ -1656,7 +1656,7 @@ class Handler(BaseHTTPRequestHandler):
                 if payload.get("media_dir") is not None:
                     raise ValueError("External media directory not allowed")
                 # 默认「用户上传」而不是「微信」：调用方没说是哪个平台，就不该替它编一个。
-                # 三个适配器（微信/钉钉/飞书）都显式传 source，不受影响；
+                # 三个适配器（微信/钉钉）都显式传 source，不受影响；
                 # 手敲/粘贴的聊天稿走默认值，标成「用户上传」才是诚实的溯源。
                 source = payload.get("source") or "用户上传"
                 if not isinstance(records, list) or not records:
